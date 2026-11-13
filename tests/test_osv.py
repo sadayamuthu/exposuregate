@@ -227,3 +227,12 @@ def test_real_ghsa_vite():
     mt = match(r, "npm", "vite", "3.1.0", NOW)
     assert mt is not None and mt.fixed_in == ["3.2.7"]
     assert match(r, "npm", "vite", "3.2.7", NOW) is None
+
+
+def test_withdrawn_nanosecond_fraction_future_still_matches():
+    r = rec(versions=["1.0"], withdrawn="2026-12-01T00:00:00.12345Z")
+    assert m(r, "1.0") is not None
+
+
+def test_withdrawn_garbage_still_matches():
+    assert m(rec(versions=["1.0"], withdrawn="not-a-date"), "1.0") is not None
