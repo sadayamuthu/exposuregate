@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 from functools import cmp_to_key
 from typing import Any
 
@@ -76,9 +76,9 @@ def _withdrawn(record: dict[str, Any], now: date) -> bool:
     if not w:
         return False
     try:
-        return datetime.fromisoformat(str(w).replace("Z", "+00:00")).date() <= now
+        return date.fromisoformat(str(w)[:10]) <= now
     except ValueError:
-        return True  # unreadable withdrawal marker: treat as withdrawn
+        return False  # unreadable marker: keep the advisory visible
 
 
 def _strip_v(s: str) -> str:
