@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "exposuregate"
+version = "0.1.0"
+description = "Gate that grades dependency versions added in lockfiles using OSV and OEBC data."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Karthikeyan Sadayamuthu" }]
+requires-python = ">=3.10"
+dependencies = [
+    "pyyaml",
+    "packaging",
+    "tomli; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff", "mypy", "types-PyYAML", "jsonschema"]
+
+[project.scripts]
+exposuregate = "exposuregate.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+files = ["src"]
