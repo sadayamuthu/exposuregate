@@ -13,13 +13,14 @@ from typing import Any
 
 from exposuregate.store import DataInvalid, DataMeta, DataMissing, SqliteStore, build_index
 
+_TIMEOUT_S = 300
 OEBC_URL = "https://openastra.org/oebc/catalog/v0.1/latest.json.gz"
 OSV_URL = "https://osv-vulnerabilities.storage.googleapis.com/{eco}/all.zip"
 
 
 def _download(url: str, dest: Path) -> None:
     try:
-        with urllib.request.urlopen(url) as resp, dest.open("wb") as f:  # noqa: S310
+        with urllib.request.urlopen(url, timeout=_TIMEOUT_S) as resp, dest.open("wb") as f:  # noqa: S310
             shutil.copyfileobj(resp, f)
     except (OSError, ValueError) as e:
         raise DataInvalid(f"download failed for {url}: {e}") from e

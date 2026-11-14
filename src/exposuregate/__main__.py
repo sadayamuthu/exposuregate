@@ -190,6 +190,9 @@ def main(argv: list[str] | None = None) -> int:
     except (DataMissing, DataInvalid) as e:
         print(f"exposuregate: error: {e}", file=sys.stderr)
         return 1
+    except Exception as e:  # noqa: BLE001 - exit 1 means BLOCK, so never let a crash reach it
+        print(f"exposuregate: unexpected error: {type(e).__name__}: {e}", file=sys.stderr)
+        return USAGE_EXIT
     return USAGE_EXIT
 
 

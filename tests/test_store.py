@@ -142,3 +142,15 @@ def test_oebc_plain_json_and_count_mismatch(tmp_path):
     p.write_text(json.dumps(cat))
     with pytest.raises(DataInvalid):
         MemoryStore.from_files(p, [])
+
+
+def test_oebc_unknown_tier_is_data_invalid(tmp_path):
+    import gzip
+    import json
+
+    cat = json.loads(gzip.open(OEBC).read())
+    cat["vulnerabilities"][0]["exposure_tier"] = "SEVERE"
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(cat))
+    with pytest.raises(DataInvalid, match="SEVERE"):
+        MemoryStore.from_files(p, [])

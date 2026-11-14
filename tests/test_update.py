@@ -95,3 +95,18 @@ def test_data_info_missing(tmp_path):
 
     with pytest.raises(DataMissing):
         data_info(tmp_path)
+
+
+def test_download_has_timeout(tmp_path, monkeypatch):
+    import urllib.request
+
+    seen = {}
+
+    def fake(url, timeout=None):
+        seen["timeout"] = timeout
+        raise OSError("boom")
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake)
+    with pytest.raises(DataInvalid):
+        update_data(tmp_path, ["PyPI"])
+    assert seen["timeout"] and seen["timeout"] >= 60
