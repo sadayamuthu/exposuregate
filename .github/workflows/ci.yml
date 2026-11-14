@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   version-check:
-    name: 🔖 Check Version Bump
+    name: 🔖 Check Version Not Yet Released
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
@@ -19,29 +19,19 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Verify Version Bump in pyproject.toml
-        env:
-          BASE_BRANCH: ${{ github.base_ref }}
+      - name: Verify the version in pyproject.toml has no tag yet
         run: |
-          # Fetch the base branch we are merging into
-          git fetch origin "$BASE_BRANCH"
-
-          # Extract version from current branch
+          # Same rule as the release job: a version is released once v<version> is tagged.
+          # A PR may keep the version (docs, CI) as long as it is still unreleased.
+          git fetch --tags --force origin
           CURRENT_VERSION=$(grep '^version =' pyproject.toml | cut -d '"' -f 2)
-
-          # Extract version from base branch (absent before the first release)
-          BASE_VERSION=$(git show "origin/$BASE_BRANCH:pyproject.toml" 2>/dev/null | grep '^version =' | cut -d '"' -f 2 || true)
-
           echo "Current Version: $CURRENT_VERSION"
-          echo "Base Version: $BASE_VERSION"
-
-          if [ "$CURRENT_VERSION" = "$BASE_VERSION" ]; then
-            echo "::error::Version in pyproject.toml ($CURRENT_VERSION) has not been bumped."
-            echo "::error::Please increment the version number before merging to $BASE_BRANCH."
+          if git rev-parse -q --verify "refs/tags/v$CURRENT_VERSION" >/dev/null; then
+            echo "::error::v$CURRENT_VERSION is already tagged (released)."
+            echo "::error::Bump the version in pyproject.toml and src/exposuregate/__init__.py before merging."
             exit 1
-          else
-            echo "Version correctly bumped to $CURRENT_VERSION"
           fi
+          echo "v$CURRENT_VERSION is not tagged yet; merging will release it."
 
   quality:
     name: 🔍 Code Quality
@@ -77,9 +67,72 @@ jobs:
           files: coverage.xml
         continue-on-error: true
 
+  action:
+    name: 🧪 GitHub Action (uses ./)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - case: uv-direct-kev
+            lockfile: uv.lock
+            verdict: BLOCK
+            exit-code: '1'
+          - case: npm-benign
+            lockfile: package-lock.json
+            verdict: PASS
+            exit-code: '0'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build a repository with a lockfile change
+        env:
+          CASE: ${{ matrix.case }}
+          LOCKFILE: ${{ matrix.lockfile }}
+        run: |
+          set -euo pipefail
+          src="$GITHUB_WORKSPACE/tests/fixtures/planted/cases/$CASE"
+          repo="$RUNNER_TEMP/action-repo"
+          mkdir -p "$repo" && cd "$repo"
+          git init -q -b main
+          git config user.name CI
+          git config user.email ci@example.invalid
+          cp "$src/old/$LOCKFILE" .
+          git add . && git commit -qm base
+          git checkout -qb change
+          cp "$src/new/$LOCKFILE" .
+          git add . && git commit -qm change
+
+      - name: Run the action
+        id: exposuregate
+        uses: ./
+        continue-on-error: true
+        with:
+          working-directory: ${{ runner.temp }}/action-repo
+          target-branch: main
+          update-data: 'false'
+          data-dir: ${{ runner.temp }}/no-data
+          args: >-
+            --oebc ${{ github.workspace }}/tests/fixtures/planted/data/oebc.json
+            --osv-dir ${{ github.workspace }}/tests/fixtures/planted/data/osv
+            --as-of 2026-11-13 --max-age-days 200
+
+      - name: Check the outputs
+        env:
+          VERDICT: ${{ steps.exposuregate.outputs.verdict }}
+          EXIT_CODE: ${{ steps.exposuregate.outputs.exit-code }}
+          JSON: ${{ steps.exposuregate.outputs.json }}
+          WANT_VERDICT: ${{ matrix.verdict }}
+          WANT_EXIT: ${{ matrix.exit-code }}
+        run: |
+          echo "verdict=$VERDICT exit-code=$EXIT_CODE json=$JSON"
+          [ "$VERDICT" = "$WANT_VERDICT" ] || { echo "::error::verdict $VERDICT, expected $WANT_VERDICT"; exit 1; }
+          [ "$EXIT_CODE" = "$WANT_EXIT" ] || { echo "::error::exit code $EXIT_CODE, expected $WANT_EXIT"; exit 1; }
+          [ -f "$JSON" ] || { echo "::error::report.json not found at $JSON"; exit 1; }
+
   release:
     name: 🚀 Release and Publish
-    needs: [quality]
+    needs: [quality, action]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
@@ -103,23 +156,41 @@ jobs:
           VERSION=$(grep '^version =' pyproject.toml | cut -d '"' -f 2)
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Check if the Version Is Already Tagged
+      - name: Check if the Version Is Already Released
         id: check_tag
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           TAG_NAME="v$VERSION"
           git fetch --tags --force origin
-          if git rev-parse -q --verify "refs/tags/$TAG_NAME" >/dev/null; then
-            echo "Tag $TAG_NAME already exists. Skipping release."
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
+          if ! git rev-parse -q --verify "refs/tags/$TAG_NAME" >/dev/null; then
             echo "Tag $TAG_NAME does not exist. Proceeding."
-            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          elif [ "$(git rev-parse "refs/tags/$TAG_NAME^{commit}")" = "$GITHUB_SHA" ]; then
+            # A re-run on the tagged commit finishes a release that failed part way;
+            # the upload and the release creation below are idempotent.
+            echo "Tag $TAG_NAME is this commit. Re-running the release steps."
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Tag $TAG_NAME already exists on another commit. Skipping release."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check for the PyPI Token
+        id: token
+        if: steps.check_tag.outputs.release == 'true'
+        env:
+          TOKEN: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          if [ -n "$TOKEN" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::PYPI_TOKEN is not set; skipping the release and PyPI upload."
+            echo "present=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Check That the Package Version Matches __version__
-        if: steps.check_tag.outputs.exists == 'false'
+        if: steps.token.outputs.present == 'true'
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
@@ -130,32 +201,49 @@ jobs:
           fi
 
       - name: Install Build Tools
-        if: steps.check_tag.outputs.exists == 'false'
+        if: steps.token.outputs.present == 'true'
         run: python -m pip install --upgrade pip build twine
 
       - name: Build Package
-        if: steps.check_tag.outputs.exists == 'false'
+        if: steps.token.outputs.present == 'true'
         run: |
           python -m build
           python -m twine check dist/*
 
+      - name: Create and Push the Tag
+        if: steps.token.outputs.present == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          TAG_NAME="v$VERSION"
+          if git rev-parse -q --verify "refs/tags/$TAG_NAME" >/dev/null; then
+            echo "Tag $TAG_NAME already exists on this commit."
+          else
+            git tag "$TAG_NAME" "$GITHUB_SHA"
+            git push origin "refs/tags/$TAG_NAME"
+          fi
+
       - name: Publish to PyPI
-        if: steps.check_tag.outputs.exists == 'false'
+        if: steps.token.outputs.present == 'true'
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
-        run: python -m twine upload dist/*
+        run: python -m twine upload --non-interactive --skip-existing dist/*
 
-      - name: Create GitHub Release and Tag
-        if: steps.check_tag.outputs.exists == 'false'
+      - name: Create the GitHub Release
+        if: steps.token.outputs.present == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           TAG_NAME="v$VERSION"
-          # Release notes: this version's section of CHANGELOG.md.
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            echo "Release $TAG_NAME already exists."
+            exit 0
+          fi
+          # Release notes: this version's section of CHANGELOG.md (literal match on the heading).
           awk -v v="$VERSION" '
-            $0 ~ "^## \\[" v "\\]" { on = 1; next }
+            index($0, "## [" v "]") == 1 { on = 1; next }
             on && /^## \[/ { exit }
             on && /^\[[^]]+\]: / { exit }
             on { print }
@@ -164,4 +252,4 @@ jobs:
           gh release create "$TAG_NAME" dist/* \
             --title "Release $TAG_NAME" \
             --notes-file release-notes.md \
-            --target "$GITHUB_SHA"
+            --verify-tag

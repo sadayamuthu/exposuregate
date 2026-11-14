@@ -51,7 +51,10 @@ jobs:
           path: exposuregate-report/report.json
 
       - name: Post report.md as a PR comment
-        if: always()
+        # Skipped when the scan wrote no report. Fork PRs get a read-only token, so the
+        # comment can fail there; the report is still in the artifact.
+        if: always() && hashFiles('exposuregate-report/report.md') != ''
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh pr comment ${{ github.event.pull_request.number }} --body-file exposuregate-report/report.md
