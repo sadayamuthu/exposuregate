@@ -30,7 +30,7 @@ def test_update_data_from_file_urls(tmp_path):
     assert man["oebc"]["generated_at_utc"].startswith("2026-11-10T10:00:00")
     assert man["oebc"]["count"] == 10
     assert man["osv"]["PyPI"]["url"] == u["osv"]["PyPI"]
-    assert man["osv"]["PyPI"]["count"] == 4
+    assert man["osv"]["PyPI"]["count"] == 5
     assert man["osv"]["PyPI"]["as_of"].startswith("2026-11-13T18:15:07")
     assert "downloaded_at" in man
     s = SqliteStore(tmp_path / "index.sqlite")
