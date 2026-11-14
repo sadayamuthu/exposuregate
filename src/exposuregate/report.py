@@ -114,28 +114,48 @@ def to_markdown(report: dict[str, Any]) -> str:
     out += ["## Findings", ""]
     if report["findings"]:
         out += [
-            "| action | package | version | dependency | CVE/advisory | tier | KEV | fixed in |",
-            "|---|---|---|---|---|---|---|---|",
+            "| action | lockfile | package | version | dependency | reason | CVE/advisory"
+            " | tier | KEV | fixed in |",
+            "|---|---|---|---|---|---|---|---|---|---|",
         ]
         for f in report["findings"]:
             ident = f["cve_id"] or ", ".join(f["advisory_ids"])
+            action = f["action"]
+            if f["suppressed_by"]:
+                action += f" (suppressed: {f['suppressed_by']})"
             out.append(
                 "| " + " | ".join(_cell(x) for x in (
-                    f["action"], f["package"], f["version"], f["dependency"], ident,
-                    f["exposure_tier"], "yes" if f["kev_listed"] else "no",
+                    action, f["lockfile"], f["package"], f["version"], f["dependency"],
+                    f["reason"], ident, f["exposure_tier"], "yes" if f["kev_listed"] else "no",
                     ", ".join(f["fixed_in"]),
                 )) + " |"
             )
+        noted = [f for f in report["findings"] if f["notes"]]
+        if noted:
+            out += ["", "Notes:", ""]
+            for f in noted:
+                who = f["package"] or f["lockfile"] or f["reason"]
+                out.append(f"- `{_cell(who)}`: {_cell('; '.join(f['notes']))}")
     else:
         out.append("No findings.")
+    if report["expired_suppressions"]:
+        out += ["", "## Expired suppressions", ""]
+        for e in report["expired_suppressions"]:
+            scope = " ".join(x for x in (e.get("ecosystem"), e.get("package")) if x)
+            scope = f" [{_cell(scope)}]" if scope else ""
+            out.append(
+                f"- `{_cell(e['id'])}`{scope}: expired {e['expires']} ({_cell(e['reason'])})"
+            )
     out += ["", "## Data", ""]
     d = report["data"]
     parts = [f"as of {report['as_of']}"]
     if d["oebc"]:
         o = d["oebc"]
         parts.append(f"OEBC generated {o['generated_at'][:10]} ({o['age_days']}d old)")
-    else:
+    elif d["osv"] or report["denials"]:
         parts.append("OEBC missing")
+    else:
+        parts.append("no data needed (no graded change)")
     for eco, v in d["osv"].items():
         parts.append(f"OSV {eco} {v['as_of'][:10]} ({v['age_days']}d old)")
     out.append("Data: " + "; ".join(parts))
