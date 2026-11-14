@@ -102,3 +102,29 @@ def test_unreadable_blob_raises_git_error(repo):
 def test_repo_root_from_subdir(repo):
     (repo / "sub").mkdir()
     assert repo_root(repo / "sub") == repo.resolve()
+
+
+def test_pr_mode_falls_back_to_origin_target(repo, tmp_path):
+    write(repo, "a.txt", "1")
+    git(repo, "add", ".")
+    git(repo, "commit", "-qm", "base")
+    base = git(repo, "rev-parse", "HEAD")
+    git(repo, "checkout", "-qb", "feature")
+    write(repo, "b.txt", "2")
+    git(repo, "add", ".")
+    git(repo, "commit", "-qm", "feature")
+    clone = tmp_path / "clone"
+    git(tmp_path, "clone", "-q", "--branch", "feature", str(repo), str(clone))
+    assert "main" not in git(clone, "branch")  # only refs/remotes/origin/main exists
+    paths, old, new = changed_files("pr", clone, target_branch="main")
+    assert paths == ["b.txt"] and old == base and new == "HEAD"
+
+
+def test_blob_exists_does_not_decode(repo):
+    (repo / "bun.lockb").write_bytes(b"\xff\xfe\x00binary")
+    git(repo, "add", ".")
+    from exposuregate.gitio import blob_exists
+
+    assert blob_exists(":", "bun.lockb", repo) is True
+    assert blob_exists(":", "nope", repo) is False
+    assert blob_exists(None, "bun.lockb", repo) is False

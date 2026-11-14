@@ -66,6 +66,7 @@ class _Inputs:
     paths: list[str]
     read: Reader
     input: dict[str, Any]
+    new_exists: Callable[[str], bool]  # path present on the new side (no read/decode)
     forced_type: str | None = None  # --new/--lockfile-type: classify is bypassed
 
 
@@ -96,6 +97,11 @@ def _walk(root: Path) -> list[str]:
 def _collect_inputs(opts: ScanOptions) -> _Inputs:
     if opts.mode == "files":
         assert opts.new_file is not None
+        named = (("--new", opts.new_file), ("--old", opts.old_file),
+                 ("--manifest", opts.manifest_file))
+        for flag, given in named:
+            if given is not None and not given.is_file():
+                raise UsageError(f"{flag} file not found: {given}")
         old, new, label = opts.old_file, opts.new_file, str(opts.new_file)
 
         def read_files(side: str, path: str) -> str | None:
@@ -104,7 +110,8 @@ def _collect_inputs(opts: ScanOptions) -> _Inputs:
             return _read_file(old if side == "old" else new)
 
         meta = {"mode": "files", "old": str(old) if old else None, "new": label}
-        return _Inputs([label], read_files, meta, forced_type=opts.lockfile_type)
+        return _Inputs([label], read_files, meta, lambda _p: new.is_file(),
+                       forced_type=opts.lockfile_type)
 
     if opts.mode == "full":
         root = opts.path
@@ -116,7 +123,8 @@ def _collect_inputs(opts: ScanOptions) -> _Inputs:
         def read_full(side: str, path: str) -> str | None:
             return None if side == "old" else _read_file(root / path)
 
-        return _Inputs(paths, read_full, {"mode": "full", "path": str(root)})
+        return _Inputs(paths, read_full, {"mode": "full", "path": str(root)},
+                       lambda p: (root / p).is_file())
 
     root = gitio.repo_root(opts.path)
     paths, old_ref, new_ref = gitio.changed_files(
@@ -130,7 +138,7 @@ def _collect_inputs(opts: ScanOptions) -> _Inputs:
         return gitio.rev_parse(ref, root) if ref not in (None, gitio.INDEX) else None
 
     meta = {"mode": opts.mode, "base": sha(old_ref), "head": sha(new_ref)}
-    return _Inputs(paths, read_git, meta)
+    return _Inputs(paths, read_git, meta, lambda p: gitio.blob_exists(new_ref, p, root))
 
 
 def _type_name(path: str, cfg: Config) -> str | None:
@@ -244,8 +252,13 @@ def _read_lockfiles(inp: _Inputs, cfg: Config) -> _LockfileResults:
         elif kind == "disabled":
             res.entries.append({"path": path, "type": _type_name(path, cfg), "status": "disabled"})
         elif kind == "unsupported":
-            ok, text = _read_side(inp, "new", path, res)
-            if ok and text is not None:
+            # Existence only: unsupported files may be binary (bun.lockb) and are never parsed.
+            try:
+                present = inp.new_exists(path)
+            except gitio.GitError as e:
+                res.denials.append(Denial("git_error", f"{path} (new side): {e}"))
+                present = False
+            if present:
                 res.entries.append({"path": path, "type": None, "status": "unsupported"})
                 res.unsupported.append(path)
         elif kind == "manifest":
