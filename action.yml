@@ -162,7 +162,7 @@ runs:
         target="${TARGET_INPUT:-${BASE_REF:-${DEFAULT_BRANCH:-main}}}"
 
         # Word-split the extra arguments; they are never evaluated by the shell.
-        read -r -a extra <<< "$EXTRA_ARGS"
+        read -r -d '' -a extra <<< "$EXTRA_ARGS" || true
         if [ "${#extra[@]}" -gt 0 ]; then
           for arg in "${extra[@]}"; do
             case "$arg" in
