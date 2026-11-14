@@ -120,7 +120,7 @@ def rebuild_oebc(
     epss = _load_epss(epss_path)
     oebc_meta, oebc_rows = load_oebc(oebc)
     vulns = []
-    for cve in sorted(set(oebc_rows) | set(epss)):
+    for cve in sorted(set(oebc_rows) | set(epss) | set(kev_added)):
         row = oebc_rows.get(cve)
         cvss = row["cvss_score"] if row else None
         score = epss.get(cve)
