@@ -49,6 +49,7 @@ class DataStore(Protocol):
 
 
 _FRACTION = re.compile(r"\.(\d+)")
+_TIERS = ("CRITICAL", "HIGH", "MEDIUM", "LOW")
 _OEBC_KEYS = ("exposure_tier", "kev_listed", "kev_date_added", "epss_score", "cvss_score")
 
 
@@ -98,6 +99,10 @@ def load_oebc(path: Path) -> tuple[SourceMeta, dict[str, dict[str, Any]]]:
     for v in vulns:
         if not isinstance(v, dict) or not isinstance(v.get("cve_id"), str):
             raise DataInvalid(f"OEBC {path}: record without cve_id")
+        if v.get("exposure_tier") not in _TIERS:
+            raise DataInvalid(
+                f"OEBC {path}: {v['cve_id']} has unknown exposure_tier {v.get('exposure_tier')!r}"
+            )
         rows[v["cve_id"]] = {k: v.get(k) for k in _OEBC_KEYS}
     extra = {"project_version": cat.get("project_version"), "rules": cat.get("rules")}
     return SourceMeta("oebc", date_, count, extra), rows

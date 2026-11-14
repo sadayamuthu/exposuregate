@@ -169,7 +169,10 @@ def expired_suppressions(
     report: list[dict[str, Any]] = []
     extra: list[Finding] = []
     for s in cfg.suppressions:
-        if s.expires >= now or not any(_suppression_matches(s, f) for f in findings):
+        # A finding already suppressed by a renewed entry does not make the old entry noisy.
+        if s.expires >= now or not any(
+            _suppression_matches(s, f) and f.suppressed_by is None for f in findings
+        ):
             continue
         eco, pkg = s.ecosystem or "", s.package or ""
         is_cve = bool(CVE_RE.match(s.id))

@@ -34,8 +34,7 @@ def _logical_entries(text: str) -> list[_Entry]:
         joined = _HASH_OPTION.sub("", " ".join(parts_)).strip()
         if not joined:
             return None
-        first = joined.split(None, 1)[0]
-        if joined.startswith("-") and first not in _EDITABLE:
+        if joined.startswith("-") and not joined.startswith(_EDITABLE):
             return None  # option line (-i, -r, -c, --index-url, ...)
         entry = _Entry(joined)
         entry.comments.extend(comments_)
@@ -81,7 +80,10 @@ def _dependency_kind(comments: list[str]) -> str:
 def _pin_for(entry: _Entry) -> Pin:
     line = entry.text
     dependency = _dependency_kind(entry.comments)
-    body = line.split(None, 1)[1] if line.split(None, 1)[0] in _EDITABLE and " " in line else line
+    body = line
+    if line.startswith(_EDITABLE):
+        body = line[len("--editable" if line.startswith("--editable") else "-e"):]
+        body = body.lstrip("= \t")
     req: Requirement | None
     try:
         req = Requirement(body)

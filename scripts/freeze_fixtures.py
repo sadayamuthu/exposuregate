@@ -78,6 +78,8 @@ def freeze(archive: Path, day: date, out: Path, planted: Path) -> dict[str, Any]
         raise SystemExit(f"archive has no usable snapshot for {day} (latest usable: {day_s})")
 
     if out.exists():
+        if any(out.iterdir()) and not (out / "provenance.json").is_file():
+            raise SystemExit(f"refusing to delete {out}: not empty and no provenance.json")
         shutil.rmtree(out)
     cves: set[str] = set()
     counts: dict[str, int] = {}
