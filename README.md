@@ -144,7 +144,8 @@ cache the data directory keyed on the date, run `update-data` and then
 `origin/<branch>` in the checkout, and `--target-branch` falls back to that.
 
 **Option 1: the composite action.** [`action.yml`](action.yml) at the root of this repository
-installs ExposureGate with pip and runs the scan:
+installs ExposureGate with pip, from the action's own checkout by default, so the tool always
+matches the action ref (`@v0.1.0` runs ExposureGate 0.1.0). It then runs the scan:
 
 ```yaml
 # .github/workflows/exposuregate.yml
@@ -175,7 +176,8 @@ jobs:
           path: exposuregate-report/report.json
 
       - name: Post report.md as a PR comment
-        if: always()
+        if: always() && hashFiles('exposuregate-report/report.md') != ''
+        continue-on-error: true   # fork PRs get a read-only token and cannot comment
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh pr comment ${{ github.event.pull_request.number }} --body-file exposuregate-report/report.md
@@ -184,12 +186,13 @@ jobs:
 | Input | Default | Meaning |
 |---|---|---|
 | `target-branch` | the PR's base branch, else the repository's default branch, else `main` | Passed to `--target-branch` |
-| `data-dir` | `~/.cache/exposuregate` | Data directory (`--data-dir`), cached per day |
+| `data-dir` | `~/.cache/exposuregate` | Data directory (`--data-dir`), cached per day; `~` is the home directory and a relative path is relative to the workspace |
+| `update-data` | `true` | `false` skips the cache restore, `update-data` and the cache save, for example when `args` passes `--oebc`/`--osv-dir` files |
 | `ecosystems` | `PyPI npm` | OSV exports for `update-data --ecosystems` |
 | `config` | none | Config file (`--config`); otherwise `.exposuregate.yml` in `working-directory` |
 | `output-dir` | `exposuregate-report` | Where `report.json` and `report.md` are written (`--output-dir`) |
-| `args` | none | Extra `scan` arguments, such as `--fail-open` or `--max-age-days 200` |
-| `version` | `latest` | ExposureGate from PyPI: `latest`, an exact version such as `0.1.0`, or `source` to install the action's own checkout |
+| `args` | none | Extra `scan` arguments, such as `--fail-open` or `--max-age-days 200`. Split on whitespace with no quoting, so no argument may contain a space. `--mode`, `--target-branch`, `--path`, `--data-dir`, `--output-dir` and `--format` are set by the action and rejected here (use the inputs) |
+| `version` | the action's own checkout | Set an exact version such as `0.1.0`, or `latest`, to install that release from PyPI instead |
 | `python-version` | `3.12` | Python for `actions/setup-python` |
 | `working-directory` | `.` | The repository to scan (`--path`) |
 
@@ -202,10 +205,17 @@ jobs:
 
 The action fails the step with the scan's own exit code: 1 for BLOCK, 2 for DENY or a usage
 error, so a WARN does not fail the job. It also writes the Markdown report to the job summary.
+The day's data is saved to the cache right after `update-data`, before the scan, so a BLOCK or
+DENY still caches it. If `update-data` fails, the step only warns, and the scan uses the cached
+data or is denied for missing or stale data.
+
+On pull requests from forks, `GITHUB_TOKEN` is read-only, so the PR comment step cannot post;
+it is marked `continue-on-error` and the report is still in the artifact and the job summary.
 
 **Option 2: raw steps.** [`docs/github-action.yml`](docs/github-action.yml) is a ready-to-copy
 workflow that does the same with plain `run:` steps, if you would rather not depend on the
-action. It uploads `report.json` and posts `report.md` as a PR comment.
+action. It installs ExposureGate from PyPI, uploads `report.json` and posts `report.md` as a PR
+comment (skipped when there is no report, and allowed to fail on fork PRs).
 
 ---
 
@@ -417,7 +427,8 @@ exposuregate scan --base <sha> --head <sha> --as-of 2026-11-13 \
     --archive ~/data/exposuregate-archive --max-age-days 200
 ```
 
-`--archive DIR` reads the daily snapshot archive written by `paper/eval/archive/archive.py`. It
+`--archive DIR` reads the daily snapshot archive written by the paper's daily archive script,
+which lives in the papers repository, not in this one. It
 uses the OEBC catalog and the OSV state as archived on the latest day on or before `--as-of`
 (`osv_mode: archived`), so nothing from later leaks in. `--archive` needs `--as-of` and cannot be
 combined with `--oebc`/`--osv-dir`. The archived OEBC is still checked for freshness against
