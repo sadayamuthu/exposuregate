@@ -111,3 +111,22 @@ def test_boundary_exactly_max_age_is_fresh():
     assert check(m, {"PyPI"}, NOW, Config(), False) == []
     m = meta(oebc="2026-11-06", PyPI="2026-11-07")
     assert codes(check(m, {"PyPI"}, NOW, Config(), False)) == ["data_stale"]
+
+
+def test_osv_max_age_override_honoured():
+    """data.osv_max_age_days changes the OSV limit in both directions; OEBC keeps the default."""
+    m = meta(oebc="2026-11-14", PyPI="2026-11-04")  # OSV 10 days old
+    assert codes(check(m, {"PyPI"}, NOW, Config(), False)) == ["data_stale"]
+    assert check(m, {"PyPI"}, NOW, Config(osv_max_age_days=10), False) == []
+    tight = check(meta(PyPI="2026-11-12"), {"PyPI"}, NOW, Config(osv_max_age_days=1), False)
+    assert [d.detail for d in tight] == ["OSV PyPI as of 2026-11-12 is 2 days old (max 1)"]
+    old_oebc = meta(oebc="2026-11-04", PyPI="2026-11-04")
+    ds = check(old_oebc, {"PyPI"}, NOW, Config(osv_max_age_days=30), False)
+    assert [d.detail for d in ds] == ["OEBC generated 2026-11-04 is 10 days old (max 7)"]
+
+
+def test_osv_max_age_from_config_file(tmp_path):
+    (tmp_path / ".exposuregate.yml").write_text("data: {osv_max_age_days: 2}\n")
+    cfg = load_config(None, tmp_path)
+    ds = check(meta(PyPI="2026-11-11"), {"PyPI"}, NOW, cfg, False)
+    assert [d.detail for d in ds] == ["OSV PyPI as of 2026-11-11 is 3 days old (max 2)"]

@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "ruff", "mypy", "types-PyYAML", "jsonschema"]
+dev = ["pytest", "pytest-cov", "ruff", "mypy", "types-PyYAML", "jsonschema"]
 
 [project.scripts]
 exposuregate = "exposuregate.__main__:main"
