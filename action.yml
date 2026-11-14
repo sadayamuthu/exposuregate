@@ -11,9 +11,13 @@ inputs:
     required: false
     default: ''
   data-dir:
-    description: ExposureGate data directory (--data-dir). It is cached per day with actions/cache.
+    description: ExposureGate data directory (--data-dir). ~ is the home directory and a relative path is relative to the workspace. It is cached per day with actions/cache.
     required: false
     default: ~/.cache/exposuregate
+  update-data:
+    description: 'true: restore the cached data, run exposuregate update-data and save the cache. false: skip all three (for example when args points the scan at --oebc/--osv-dir files).'
+    required: false
+    default: 'true'
   ecosystems:
     description: OSV exports to download, space-separated (update-data --ecosystems).
     required: false
@@ -27,13 +31,19 @@ inputs:
     required: false
     default: exposuregate-report
   args:
-    description: Extra arguments for exposuregate scan, such as --fail-open or --max-age-days 200.
+    description: >-
+      Extra arguments for exposuregate scan, such as --fail-open or --max-age-days 200. Split on
+      whitespace with no quoting, so no argument may contain a space. --mode, --target-branch,
+      --path, --data-dir, --output-dir and --format are set by the action and are rejected here.
     required: false
     default: ''
   version:
-    description: ExposureGate to pip install. latest, an exact version such as 0.1.0, or source to install this action's own checkout.
+    description: >-
+      Which ExposureGate to install. Empty (the default) installs this action's own checkout, so
+      the tool matches the action ref (for example @v0.1.0). An exact version such as 0.1.0, or
+      latest, installs that release from PyPI instead.
     required: false
-    default: latest
+    default: ''
   python-version:
     description: Python version for actions/setup-python.
     required: false
@@ -72,41 +82,68 @@ runs:
       run: |
         set -euo pipefail
         case "$VERSION" in
-          '' | latest) spec=exposuregate ;;
-          source) spec="$GITHUB_ACTION_PATH" ;;
+          '') spec="$GITHUB_ACTION_PATH" ;;
+          latest) spec=exposuregate ;;
           v*) spec="exposuregate==${VERSION#v}" ;;
           *) spec="exposuregate==$VERSION" ;;
         esac
         python -m pip install --disable-pip-version-check --quiet "$spec"
         exposuregate --version
 
-    - name: Date key for the data cache
-      id: date
+    - name: Resolve the data directory and the cache key
+      id: data
       shell: bash
-      run: echo "today=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+      env:
+        DATA_DIR: ${{ inputs.data-dir }}
+      run: |
+        set -euo pipefail
+        dir="$DATA_DIR"
+        case "$dir" in
+          '~') dir="$HOME" ;;
+          '~/'*) dir="$HOME/${dir#\~/}" ;;
+          /*) ;;
+          *) dir="$GITHUB_WORKSPACE/$dir" ;;
+        esac
+        echo "dir=$dir" >> "$GITHUB_OUTPUT"
+        echo "key=exposuregate-data-$RUNNER_OS-$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
 
-    - name: Cache ExposureGate data
-      uses: actions/cache@v4
+    - name: Restore cached ExposureGate data
+      id: restore
+      if: inputs.update-data == 'true'
+      uses: actions/cache/restore@v4
       with:
-        path: ${{ inputs.data-dir }}
-        key: exposuregate-data-${{ runner.os }}-${{ steps.date.outputs.today }}
+        path: ${{ steps.data.outputs.dir }}
+        key: ${{ steps.data.outputs.key }}
         restore-keys: exposuregate-data-${{ runner.os }}-
 
     - name: Update OSV and OEBC data
+      id: update
+      if: inputs.update-data == 'true'
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       env:
-        DATA_DIR: ${{ inputs.data-dir }}
+        DATA_DIR: ${{ steps.data.outputs.dir }}
         ECOSYSTEMS: ${{ inputs.ecosystems }}
       run: |
         set -uo pipefail
         # A failed download leaves the cached data as it was. The scan then fails
         # closed (DENY) if that data is missing or stale, so this step doesn't fail.
         # shellcheck disable=SC2086 # ECOSYSTEMS is a space-separated list
-        if ! exposuregate update-data --data-dir "$DATA_DIR" --ecosystems $ECOSYSTEMS; then
+        if exposuregate update-data --data-dir "$DATA_DIR" --ecosystems $ECOSYSTEMS; then
+          echo "ok=true" >> "$GITHUB_OUTPUT"
+        else
           echo "::warning::exposuregate update-data failed; scanning with the cached data, if any"
+          echo "ok=false" >> "$GITHUB_OUTPUT"
         fi
         exposuregate data-info --data-dir "$DATA_DIR" || true
+
+    # Saved before the scan, so a BLOCK or DENY still caches the day's data.
+    - name: Save ExposureGate data to the cache
+      if: inputs.update-data == 'true' && steps.update.outputs.ok == 'true' && steps.restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ steps.data.outputs.dir }}
+        key: ${{ steps.data.outputs.key }}
 
     - name: Scan
       id: scan
@@ -116,13 +153,27 @@ runs:
         TARGET_INPUT: ${{ inputs.target-branch }}
         BASE_REF: ${{ github.base_ref }}
         DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-        DATA_DIR: ${{ inputs.data-dir }}
+        DATA_DIR: ${{ steps.data.outputs.dir }}
         CONFIG: ${{ inputs.config }}
         OUTPUT_DIR: ${{ inputs.output-dir }}
         EXTRA_ARGS: ${{ inputs.args }}
       run: |
         set -uo pipefail
         target="${TARGET_INPUT:-${BASE_REF:-${DEFAULT_BRANCH:-main}}}"
+
+        # Word-split the extra arguments; they are never evaluated by the shell.
+        read -r -a extra <<< "$EXTRA_ARGS"
+        if [ "${#extra[@]}" -gt 0 ]; then
+          for arg in "${extra[@]}"; do
+            case "$arg" in
+              --mode | --mode=* | --target-branch | --target-branch=* | --path | --path=* | \
+              --data-dir | --data-dir=* | --output-dir | --output-dir=* | --format | --format=*)
+                echo "::error::'${arg%%=*}' is set by the action; use its input instead of args"
+                echo "exit-code=2" >> "$GITHUB_OUTPUT"
+                exit 2 ;;
+            esac
+          done
+        fi
 
         # --mode pr diffs against the merge-base, which needs history.
         if [ "$(git rev-parse --is-shallow-repository)" = true ]; then
@@ -141,8 +192,6 @@ runs:
         if [ -n "$CONFIG" ]; then
           cmd+=(--config "$CONFIG")
         fi
-        # Word-split the extra arguments; they are never evaluated by the shell.
-        read -r -a extra <<< "$EXTRA_ARGS"
         if [ "${#extra[@]}" -gt 0 ]; then
           cmd+=("${extra[@]}")
         fi
