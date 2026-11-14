@@ -8,3 +8,7 @@ __pycache__/
 .coverage
 .exposuregate/
 docs/superpowers/
+dist/
+build/
+htmlcov/
+coverage.xml
