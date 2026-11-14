@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -37,7 +38,7 @@ def meta():
     )
 
 
-def build(findings=None, denials=None, m="default", verdict="BLOCK", code=1):
+def build(findings=None, denials=None, m="default", verdict="BLOCK", code=1, expired=None):
     cfg = load_config(None, Path("."))
     return build_report(
         verdict=verdict, exit_code=code, as_of=AS_OF,
@@ -50,8 +51,8 @@ def build(findings=None, denials=None, m="default", verdict="BLOCK", code=1):
         ],
         findings=findings if findings is not None else [mk(r) for r in REASONS],
         skipped=[{"lockfile": "uv.lock", "package": "my|lib", "reason": "source:path"}],
-        denials=denials or [], expired=[], timing_ms={"load_data": 1, "read_lockfiles": 2,
-                                                       "match": 3, "total": 6},
+        denials=denials or [], expired=expired or [],
+        timing_ms={"load_data": 1, "read_lockfiles": 2, "match": 3, "total": 6},
     )
 
 
@@ -83,12 +84,39 @@ def test_markdown_contains_verdict_denials_and_rows():
     md = to_markdown(r)
     assert "BLOCK" in md
     assert "data_stale" in md and "OEBC old" in md and "not enforced" in md
-    assert "| action | package | version | dependency | CVE/advisory |" in md
+    assert "| action | lockfile | package | version | dependency | reason | CVE/advisory |" in md
     assert "| tier | KEV | fixed in |" in md
     assert "urllib3" in md and "CVE-1" in md and "1.26.5" in md
     assert "Gemfile.lock" in md and "unsupported" in md
     assert "my\\|lib" in md
     assert "2026-11-11" in md
+
+
+def test_markdown_unsupported_row_is_identifiable():
+    f = mk(reason="unsupported_lockfile", action="warn", package="", lockfile="yarn.lock",
+           version="")
+    md = to_markdown(build(findings=[f], verdict="WARN", code=0))
+    (row,) = [ln for ln in md.splitlines() if "unsupported_lockfile" in ln and ln.startswith("|")]
+    assert "yarn.lock" in row and row.startswith("| warn |")
+
+
+def test_markdown_shows_suppression_notes_and_expired():
+    f = replace(mk(), action="pass", suppressed_by="CVE-1", notes=["marker: x", "dev_only"])
+    exp = [{"id": "CVE-9", "package": "foo", "ecosystem": "PyPI", "reason": "old|r",
+            "expires": "2026-11-01"}]
+    md = to_markdown(build(findings=[f], verdict="PASS", code=0, expired=exp))
+    assert "| pass (suppressed: CVE-1) |" in md
+    assert "marker: x; dev_only" in md
+    assert "## Expired suppressions" in md
+    assert "`CVE-9` [PyPI foo]: expired 2026-11-01 (old\\|r)" in md
+    assert "## Expired suppressions" not in to_markdown(build())
+
+
+def test_markdown_no_data_needed_vs_missing():
+    md = to_markdown(build(findings=[], m=None, verdict="PASS", code=0))
+    assert "no data needed (no graded change)" in md and "OEBC missing" not in md
+    md = to_markdown(build(findings=[], m=None, denials=[Denial("data_missing", "x")]))
+    assert "OEBC missing" in md
 
 
 def test_ordering_block_first():
