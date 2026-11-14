@@ -1,0 +1,172 @@
+name: ExposureGate scan
+description: Block pull requests that add dependency versions with known, exploited vulnerabilities (OSV + OEBC).
+author: sadayamuthu
+branding:
+  icon: shield
+  color: red
+
+inputs:
+  target-branch:
+    description: Branch to compare against (--target-branch). Defaults to the pull request's base branch, or the repository's default branch.
+    required: false
+    default: ''
+  data-dir:
+    description: ExposureGate data directory (--data-dir). It is cached per day with actions/cache.
+    required: false
+    default: ~/.cache/exposuregate
+  ecosystems:
+    description: OSV exports to download, space-separated (update-data --ecosystems).
+    required: false
+    default: PyPI npm
+  config:
+    description: Path to the config file (--config). Defaults to .exposuregate.yml in working-directory, if present.
+    required: false
+    default: ''
+  output-dir:
+    description: Directory for report.json and report.md (--output-dir), relative to working-directory.
+    required: false
+    default: exposuregate-report
+  args:
+    description: Extra arguments for exposuregate scan, such as --fail-open or --max-age-days 200.
+    required: false
+    default: ''
+  version:
+    description: ExposureGate to pip install. latest, an exact version such as 0.1.0, or source to install this action's own checkout.
+    required: false
+    default: latest
+  python-version:
+    description: Python version for actions/setup-python.
+    required: false
+    default: '3.12'
+  working-directory:
+    description: Directory of the git repository to scan (--path).
+    required: false
+    default: .
+
+outputs:
+  verdict:
+    description: 'The verdict: PASS, WARN, BLOCK or DENY. Empty when the scan failed before writing a report (a usage or config error).'
+    value: ${{ steps.scan.outputs.verdict }}
+  json:
+    description: Absolute path of report.json.
+    value: ${{ steps.scan.outputs.json }}
+  markdown:
+    description: Absolute path of report.md.
+    value: ${{ steps.scan.outputs.markdown }}
+  exit-code:
+    description: 'The exit code of exposuregate scan: 0 PASS/WARN, 1 BLOCK, 2 DENY or usage error.'
+    value: ${{ steps.scan.outputs.exit-code }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install ExposureGate
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        case "$VERSION" in
+          '' | latest) spec=exposuregate ;;
+          source) spec="$GITHUB_ACTION_PATH" ;;
+          v*) spec="exposuregate==${VERSION#v}" ;;
+          *) spec="exposuregate==$VERSION" ;;
+        esac
+        python -m pip install --disable-pip-version-check --quiet "$spec"
+        exposuregate --version
+
+    - name: Date key for the data cache
+      id: date
+      shell: bash
+      run: echo "today=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+    - name: Cache ExposureGate data
+      uses: actions/cache@v4
+      with:
+        path: ${{ inputs.data-dir }}
+        key: exposuregate-data-${{ runner.os }}-${{ steps.date.outputs.today }}
+        restore-keys: exposuregate-data-${{ runner.os }}-
+
+    - name: Update OSV and OEBC data
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        DATA_DIR: ${{ inputs.data-dir }}
+        ECOSYSTEMS: ${{ inputs.ecosystems }}
+      run: |
+        set -uo pipefail
+        # A failed download leaves the cached data as it was. The scan then fails
+        # closed (DENY) if that data is missing or stale, so this step doesn't fail.
+        # shellcheck disable=SC2086 # ECOSYSTEMS is a space-separated list
+        if ! exposuregate update-data --data-dir "$DATA_DIR" --ecosystems $ECOSYSTEMS; then
+          echo "::warning::exposuregate update-data failed; scanning with the cached data, if any"
+        fi
+        exposuregate data-info --data-dir "$DATA_DIR" || true
+
+    - name: Scan
+      id: scan
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        TARGET_INPUT: ${{ inputs.target-branch }}
+        BASE_REF: ${{ github.base_ref }}
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        DATA_DIR: ${{ inputs.data-dir }}
+        CONFIG: ${{ inputs.config }}
+        OUTPUT_DIR: ${{ inputs.output-dir }}
+        EXTRA_ARGS: ${{ inputs.args }}
+      run: |
+        set -uo pipefail
+        target="${TARGET_INPUT:-${BASE_REF:-${DEFAULT_BRANCH:-main}}}"
+
+        # --mode pr diffs against the merge-base, which needs history.
+        if [ "$(git rev-parse --is-shallow-repository)" = true ]; then
+          echo "::notice::Shallow clone; fetching full history for the merge base. Set fetch-depth: 0 on actions/checkout to skip this."
+          git fetch --quiet --no-tags --unshallow origin
+        fi
+        # exposuregate falls back to origin/<branch> when there is no local branch.
+        if ! git rev-parse --verify --quiet "$target^{commit}" >/dev/null &&
+           ! git rev-parse --verify --quiet "refs/remotes/origin/$target^{commit}" >/dev/null; then
+          git fetch --quiet --no-tags origin "+refs/heads/$target:refs/remotes/origin/$target" ||
+            echo "::warning::can't fetch '$target' from origin"
+        fi
+
+        cmd=(exposuregate scan --mode pr --target-branch "$target" --path .
+             --data-dir "$DATA_DIR" --output-dir "$OUTPUT_DIR" --format json markdown)
+        if [ -n "$CONFIG" ]; then
+          cmd+=(--config "$CONFIG")
+        fi
+        # Word-split the extra arguments; they are never evaluated by the shell.
+        read -r -a extra <<< "$EXTRA_ARGS"
+        if [ "${#extra[@]}" -gt 0 ]; then
+          cmd+=("${extra[@]}")
+        fi
+
+        json="$OUTPUT_DIR/report.json"
+        md="$OUTPUT_DIR/report.md"
+        rm -f "$json" "$md"
+        code=0
+        "${cmd[@]}" > /dev/null || code=$?
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+
+        if [ -f "$json" ]; then
+          dir="$(cd "$OUTPUT_DIR" && pwd)"
+          verdict=$(python -c 'import json, sys; print(json.load(open(sys.argv[1]))["verdict"])' "$json")
+          {
+            echo "verdict=$verdict"
+            echo "json=$dir/report.json"
+            echo "markdown=$dir/report.md"
+          } >> "$GITHUB_OUTPUT"
+          cat "$md"
+          cat "$md" >> "$GITHUB_STEP_SUMMARY"
+        else
+          echo "::error::exposuregate scan exited $code without writing a report (usage or config error)"
+        fi
+
+        # Propagate the scan's exit code: 1 = BLOCK, 2 = DENY or usage error.
+        exit "$code"

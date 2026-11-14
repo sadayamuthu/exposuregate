@@ -1,4 +1,6 @@
 # Example GitHub Actions workflow for ExposureGate (copy to .github/workflows/exposuregate.yml).
+# This is the raw-steps alternative to the composite action in action.yml
+# (`uses: sadayamuthu/exposuregate@v0.1.0`); see "As a GitHub Action" in the README.
 name: exposuregate
 
 on:
