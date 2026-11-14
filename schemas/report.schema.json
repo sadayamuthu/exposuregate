@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/exposuregate/report.schema.json",
+  "title": "ExposureGate report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["tool", "verdict", "exit_code", "timestamp", "as_of", "input", "data", "policy",
+               "lockfiles", "findings", "skipped", "denials", "expired_suppressions", "summary",
+               "timing_ms"],
+  "properties": {
+    "tool": {
+      "type": "object", "additionalProperties": false, "required": ["name", "version"],
+      "properties": {"name": {"const": "exposuregate"}, "version": {"type": "string"}}
+    },
+    "verdict": {"enum": ["PASS", "WARN", "BLOCK", "DENY"]},
+    "exit_code": {"enum": [0, 1, 2]},
+    "timestamp": {"type": "string"},
+    "as_of": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+    "input": {"type": "object"},
+    "data": {
+      "type": "object", "additionalProperties": false, "required": ["oebc", "osv"],
+      "properties": {
+        "oebc": {
+          "oneOf": [
+            {"type": "null"},
+            {"type": "object", "additionalProperties": false,
+             "required": ["source", "generated_at", "age_days", "count", "project_version", "rules"],
+             "properties": {
+               "source": {"type": ["string", "null"]},
+               "generated_at": {"type": "string"},
+               "age_days": {"type": "integer"},
+               "count": {"type": "integer"},
+               "project_version": {"type": ["string", "null"]},
+               "rules": {}
+             }}
+          ]
+        },
+        "osv": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object", "additionalProperties": false,
+            "required": ["source", "as_of", "age_days", "advisories"],
+            "properties": {
+              "source": {"type": ["string", "null"]},
+              "as_of": {"type": "string"},
+              "age_days": {"type": "integer"},
+              "advisories": {"type": "integer"}
+            }
+          }
+        },
+        "replay": {"type": "object"}
+      }
+    },
+    "policy": {"type": "object", "additionalProperties": {"enum": ["pass", "warn", "block"]}},
+    "lockfiles": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["path", "type", "status"],
+        "properties": {
+          "path": {"type": "string"},
+          "type": {"type": ["string", "null"]},
+          "status": {"enum": ["graded", "unchanged", "unsupported", "manifest_only", "disabled",
+                              "excluded", "parse_error"]},
+          "pins_added_or_changed": {"type": "integer"},
+          "pins_skipped": {"type": "integer"}
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["finding_id", "lockfile", "ecosystem", "package", "version",
+                     "previous_version", "dependency", "reason", "cve_id", "advisory_ids",
+                     "exposure_tier", "kev_listed", "kev_date_added", "epss_score", "cvss_score",
+                     "fixed_in", "base_action", "action", "suppressed_by", "notes"],
+        "properties": {
+          "finding_id": {"type": "string"},
+          "lockfile": {"type": "string"},
+          "ecosystem": {"type": "string"},
+          "package": {"type": "string"},
+          "version": {"type": "string"},
+          "previous_version": {"type": ["string", "null"]},
+          "dependency": {"enum": ["direct", "transitive", "unknown"]},
+          "reason": {"enum": ["graded", "not_in_oebc", "no_cve", "unparseable_version", "unpinned",
+                              "unsupported_lockfile", "suppression_expired"]},
+          "cve_id": {"type": ["string", "null"]},
+          "advisory_ids": {"type": "array", "items": {"type": "string"}},
+          "exposure_tier": {"type": ["string", "null"]},
+          "kev_listed": {"type": "boolean"},
+          "kev_date_added": {"type": ["string", "null"]},
+          "epss_score": {"type": ["number", "null"]},
+          "cvss_score": {"type": ["number", "null"]},
+          "fixed_in": {"type": "array", "items": {"type": "string"}},
+          "base_action": {"enum": ["pass", "warn", "block"]},
+          "action": {"enum": ["pass", "warn", "block"]},
+          "suppressed_by": {"type": ["string", "null"]},
+          "notes": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "skipped": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["lockfile", "package", "reason"],
+        "properties": {"lockfile": {"type": "string"}, "package": {"type": "string"},
+                       "reason": {"type": "string"}}
+      }
+    },
+    "denials": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["code", "detail", "enforced"],
+        "properties": {
+          "code": {"enum": ["data_missing", "data_stale", "data_from_future", "data_invalid",
+                            "lockfile_parse", "lockfile_unsupported", "git_error"]},
+          "detail": {"type": "string"},
+          "enforced": {"type": "boolean"}
+        }
+      }
+    },
+    "expired_suppressions": {"type": "array", "items": {"type": "object"}},
+    "summary": {
+      "type": "object", "additionalProperties": false,
+      "required": ["block", "warn", "pass", "denials"],
+      "properties": {"block": {"type": "integer"}, "warn": {"type": "integer"},
+                     "pass": {"type": "integer"}, "denials": {"type": "integer"}}
+    },
+    "timing_ms": {
+      "type": "object", "additionalProperties": false,
+      "required": ["load_data", "read_lockfiles", "match", "total"],
+      "properties": {"load_data": {"type": "integer"}, "read_lockfiles": {"type": "integer"},
+                     "match": {"type": "integer"}, "total": {"type": "integer"}}
+    }
+  }
+}
