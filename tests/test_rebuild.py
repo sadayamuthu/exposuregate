@@ -121,3 +121,22 @@ def test_cli_rebuild_oebc(tmp_path, capsys):
     assert main(argv) == 1
     assert "EPSS" in capsys.readouterr().err
     assert main(["rebuild-oebc", "--as-of", "2026-11-12"]) == 2
+
+
+def test_rebuild_includes_kev_cves_absent_from_oebc_and_epss(tmp_path):
+    """Every CVE KEV-listed on or before D is CRITICAL, even if OEBC and EPSS lack it."""
+    kev = json.loads(KEV.read_text())
+    kev["vulnerabilities"] += [
+        {"cveID": "CVE-2026-99001", "dateAdded": "2026-11-05"},
+        {"cveID": "CVE-2026-99002", "dateAdded": "2026-11-09"},
+    ]
+    kev_path = tmp_path / "kev.json"
+    kev_path.write_text(json.dumps(kev))
+    cat = rebuild_oebc(date(2026, 11, 8), kev_path, EPSS, OEBC, tmp_path / "out.json")
+    v = by_cve(cat)
+    assert v["CVE-2026-99001"] == {
+        "cve_id": "CVE-2026-99001", "exposure_tier": "CRITICAL", "kev_listed": True,
+        "kev_date_added": "2026-11-05", "epss_score": None, "cvss_score": None,
+    }
+    assert "CVE-2026-99002" not in v  # added after the as-of date
+    assert cat["count"] == len(cat["vulnerabilities"])
