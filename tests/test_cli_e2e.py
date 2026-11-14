@@ -442,6 +442,37 @@ def test_unsupported_lockfile_warns(repo, capsys):
     assert f["reason"] == "unsupported_lockfile" and f["lockfile"] == "web/yarn.lock"
 
 
+def test_binary_unsupported_lockfile_warns(repo, capsys):
+    (repo / "bun.lockb").write_bytes(b"\xff\xfe\x00\x81binary lockfile")
+    git(repo, "add", "bun.lockb")
+    code, r = scan(capsys, "--path", str(repo))
+    assert code == 0 and r["verdict"] == "WARN" and r["denials"] == []
+    assert r["lockfiles"] == [{"path": "bun.lockb", "type": None, "status": "unsupported"}]
+    assert [f["reason"] for f in r["findings"]] == ["unsupported_lockfile"]
+
+
+def test_full_mode_binary_unsupported_lockfile_warns(tmp_path, capsys):
+    d = tmp_path / "plain"
+    d.mkdir()
+    (d / "bun.lockb").write_bytes(b"\xff\xfe\x00binary")
+    code, r = scan(capsys, "--mode", "full", "--path", str(d))
+    assert code == 0 and r["lockfiles"][0]["status"] == "unsupported"
+
+
+@pytest.mark.parametrize("flag", ["--new", "--old", "--manifest"])
+def test_files_mode_missing_named_file_is_usage_error(tmp_path, capsys, flag):
+    files = {f: tmp_path / f"{f[2:]}.txt" for f in ("--new", "--old", "--manifest")}
+    for f, p in files.items():
+        if f != flag:
+            p.write_text("six==1.16.0\n")
+    argv = ["scan", "--lockfile-type", "requirements", *DATA]
+    for f, p in files.items():
+        argv += [f, str(p)]
+    assert main(argv) == 2
+    captured = capsys.readouterr()
+    assert flag in captured.err and "not found" in captured.err and captured.out == ""
+
+
 def test_manifest_only_listed_no_finding(repo, capsys):
     put(repo, "pyproject.toml", "[project]\nname='x'\n")
     put(repo, "web/package.json", "{}")

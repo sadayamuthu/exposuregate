@@ -69,10 +69,14 @@ def changed_files(
         staged = _git(["diff", "--cached", "--name-only", "--no-renames", "-z"], root).stdout
         return _names(staged), "HEAD", INDEX
     if mode == "pr":
-        rev_parse(target_branch, root)
-        proc = _git(["merge-base", target_branch, "HEAD"], root, check=False)
+        target = target_branch
+        if not _has_commit(target, root) and _has_commit(f"origin/{target}", root):
+            # CI checkouts (e.g. actions/checkout) only have the remote-tracking branch.
+            target = f"origin/{target}"
+        rev_parse(target, root)
+        proc = _git(["merge-base", target, "HEAD"], root, check=False)
         if proc.returncode != 0:
-            raise GitError(f"no merge base between {target_branch} and HEAD")
+            raise GitError(f"no merge base between {target} and HEAD")
         mb = proc.stdout.decode().strip()
         return _diff(mb, "HEAD", root), mb, "HEAD"
     if mode == "explicit":
@@ -90,10 +94,7 @@ def tracked_files(cwd: Path) -> list[str]:
     return _names(_git(["ls-files", "-z"], cwd).stdout)
 
 
-def read_blob(ref: str | None, path: str, cwd: Path) -> str | None:
-    """Text of path at ref (``":"`` = index); None when ref is None or path is absent there."""
-    if ref is None:
-        return None
+def _blob_sha(ref: str, path: str, cwd: Path) -> str | None:
     if ref == INDEX:
         listing = _git(["ls-files", "-s", "-z", "--", path], cwd).stdout
         # "<mode> <sha> <stage>\t<path>"
@@ -104,10 +105,23 @@ def read_blob(ref: str | None, path: str, cwd: Path) -> str | None:
         # "<mode> <type> <sha>\t<path>"
         entries = [e.split(b"\t", 1)[0].split() for e in listing.split(b"\0") if e]
         shas = [e[2] for e in entries if len(e) == 3 and e[1] == b"blob"]
-    if not shas:
+    return shas[0].decode() if shas else None
+
+
+def blob_exists(ref: str | None, path: str, cwd: Path) -> bool:
+    """Whether path exists at ref (``":"`` = index), without reading or decoding it."""
+    return ref is not None and _blob_sha(ref, path, cwd) is not None
+
+
+def read_blob(ref: str | None, path: str, cwd: Path) -> str | None:
+    """Text of path at ref (``":"`` = index); None when ref is None or path is absent there."""
+    if ref is None:
+        return None
+    sha = _blob_sha(ref, path, cwd)
+    if sha is None:
         return None
     side = "index" if ref == INDEX else ref
-    proc = _git(["cat-file", "blob", shas[0].decode()], cwd, check=False)
+    proc = _git(["cat-file", "blob", sha], cwd, check=False)
     if proc.returncode != 0:
         err = proc.stderr.decode("utf-8", "replace").strip()
         raise GitError(f"cannot read {path} at {side}: {err}")
