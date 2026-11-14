@@ -1,0 +1,653 @@
+{
+  "description": "Planted-exposure set (spec 11). Each case is scanned with the frozen data in data/.",
+  "data": {
+    "archive_day": "2026-11-13",
+    "oebc_generated": "2026-06-14",
+    "osv_as_of": "2026-11-13"
+  },
+  "scan_args": [
+    "--as-of",
+    "2026-11-13",
+    "--max-age-days",
+    "200"
+  ],
+  "scan_args_why": "Ruling F: the frozen OEBC is the 2026-06-14 build and OSV the 2026-11-13 export. --as-of pins 'now' to the archive day and --max-age-days 200 covers the OEBC's age, so verdicts reflect grading, not staleness (with defaults every case would be DENY data_stale).",
+  "selection": "Versions were chosen programmatically from the frozen records: for KEV cases the highest final release (within the named line) matched by a KEV-listed CVE whose tier is CRITICAL in the frozen OEBC; for HIGH/LOW the highest final release whose findings are all graded with that worst tier; benign bumps go to the fixed version, which has no advisories. scripts/freeze_fixtures.py re-checks every expected finding against the frozen data.",
+  "cases": [
+    {
+      "id": "uv-direct-kev",
+      "lockfile_type": "uv",
+      "old": "cases/uv-direct-kev/old/uv.lock",
+      "new": "cases/uv-direct-kev/new/uv.lock",
+      "expected_verdict": "BLOCK",
+      "expected_exit_code": 1,
+      "tags": [
+        "direct",
+        "kev"
+      ],
+      "expected_findings": [
+        {
+          "package": "litellm",
+          "version": "1.83.6",
+          "cve_id": "CVE-2026-42208",
+          "dependency": "direct",
+          "reason": "graded",
+          "exposure_tier": "CRITICAL",
+          "action": "block"
+        },
+        {
+          "package": "litellm",
+          "version": "1.83.6",
+          "cve_id": "CVE-2026-42271",
+          "dependency": "direct",
+          "reason": "graded",
+          "exposure_tier": "CRITICAL",
+          "action": "block"
+        }
+      ],
+      "exact_findings": false,
+      "why": "litellm 1.83.6: highest final release matched by the KEV-listed CVE-2026-42208 and CVE-2026-42271 (CRITICAL in the 2026-06-14 OEBC); it also has HIGH/MEDIUM/LOW, not_in_oebc and no_cve findings."
+    },
+    {
+      "id": "uv-transitive-kev",
+      "lockfile_type": "uv",
+      "old": "cases/uv-transitive-kev/old/uv.lock",
+      "new": "cases/uv-transitive-kev/new/uv.lock",
+      "expected_verdict": "BLOCK",
+      "expected_exit_code": 1,
+      "tags": [
+        "transitive",
+        "kev"
+      ],
+      "expected_findings": [
+        {
+          "package": "pillow",
+          "version": "10.0.0",
+          "cve_id": "CVE-2023-4863",
+          "dependency": "transitive",
+          "reason": "graded",
+          "exposure_tier": "CRITICAL",
+          "action": "block"
+        }
+      ],
+      "exact_findings": false,
+      "why": "starlette (via fastapi) has no CRITICAL CVE in the frozen OEBC: its only KEV CVE, CVE-2026-48710, was KEV-listed 2026-09-02, after the 2026-06-14 OEBC build, which grades it LOW (see the stale-starlette case). pillow via matplotlib is used instead: pillow 10.0.0 is the last release before the fix (10.0.1) for KEV-listed CVE-2023-4863 (libwebp, CRITICAL); matplotlib 3.8.0 has no advisories."
+    },
+    {
+      "id": "uv-high",
+      "lockfile_type": "uv",
+      "old": "cases/uv-high/old/uv.lock",
+      "new": "cases/uv-high/new/uv.lock",
+      "expected_verdict": "WARN",
+      "expected_exit_code": 0,
+      "tags": [
+        "direct",
+        "high"
+      ],
+      "expected_findings": [
+        {
+          "package": "pyyaml",
+          "version": "5.3.1",
+          "cve_id": "CVE-2020-14343",
+          "dependency": "direct",
+          "reason": "graded",
+          "exposure_tier": "HIGH",
+          "action": "warn"
+        }
+      ],
+      "exact_findings": false,
+      "why": "pyyaml 5.3.1: highest final release whose only finding is HIGH (CVE-2020-14343)."
+    },
+    {
+      "id": "uv-low",
+      "lockfile_type": "uv",
+      "old": "cases/uv-low/old/uv.lock",
+      "new": "cases/uv-low/new/uv.lock",
+      "expected_verdict": "PASS",
+      "expected_exit_code": 0,
+      "tags": [
+        "direct",
+        "low"
+      ],
+      "expected_findings": [
+        {
+          "package": "pydantic",
+          "version": "2.3.0",
+          "cve_id": "CVE-2024-3772",
+          "dependency": "direct",
+          "reason": "graded",
+          "exposure_tier": "LOW",
+          "action": "pass"
+        }
+      ],
+      "exact_findings": false,
+      "why": "pydantic 2.3.0: highest final release whose only finding is LOW (CVE-2024-3772)."
+    },
+    {
+      "id": "uv-benign",
+      "lockfile_type": "uv",
+      "old": "cases/uv-benign/old/uv.lock",
+      "new": "cases/uv-benign/new/uv.lock",
+      "expected_verdict": "PASS",
+      "expected_exit_code": 0,
+      "tags": [
+        "direct",
+        "benign"
+      ],
+      "expected_findings": [],
+      "exact_findings": true,
+      "why": "requests 2.32.5 -> 2.33.0, the fixed version of CVE-2026-25645 (LOW); 2.33.0 has no advisories."
+    },
+    {
+      "id": "uv-stale-starlette",
+      "lockfile_type": "uv",
+      "old": "cases/uv-stale-starlette/old/uv.lock",
+      "new": "cases/uv-stale-starlette/new/uv.lock",
+      "expected_verdict": "WARN",
+      "expected_exit_code": 0,
+      "tags": [
+        "transitive",
+        "kev",
+        "stale_oebc"
+      ],
+      "expected_findings": [
+        {
+          "package": "starlette",
+          "version": "0.41.3",
+          "cve_id": "CVE-2026-48710",
+          "dependency": "transitive",
+          "reason": "graded",
+          "exposure_tier": "LOW",
+          "action": "pass"
+        },
+        {
+          "package": "starlette",
+          "version": "0.41.3",
+          "cve_id": "CVE-2026-48817",
+          "dependency": "transitive",
+          "reason": "not_in_oebc",
+          "exposure_tier": null,
+          "action": "warn"
+        }
+      ],
+      "exact_findings": false,
+      "why": "Documents OEBC staleness: CVE-2026-48710 was KEV-listed 2026-09-02, after the 2026-06-14 OEBC build, so it grades LOW (pass) instead of CRITICAL (block). The WARN comes from newer CVEs not in that OEBC (not_in_oebc). fastapi 0.115.6 has no advisories; starlette 0.41.3 satisfies its starlette<0.42 pin."
+    },
+    {
+      "id": "uv-stale-brotli",
+      "lockfile_type": "uv",
+      "old": "cases/uv-stale-brotli/old/uv.lock",
+      "new": "cases/uv-stale-brotli/new/uv.lock",
+      "expected_verdict": "WARN",
+      "expected_exit_code": 0,
+      "tags": [
+        "direct",
+        "kev",
+        "stale_oebc"
+      ],
+      "expected_findings": [
+        {
+          "package": "brotli",
+          "version": "1.1.0",
+          "cve_id": "CVE-2026-111497",
+          "dependency": "direct",
+          "reason": "not_in_oebc",
+          "exposure_tier": null,
+          "action": "warn"
+        },
+        {
+          "package": "brotli",
+          "version": "1.1.0",
+          "cve_id": "CVE-2025-6176",
+          "dependency": "direct",
+          "reason": "graded",
+          "exposure_tier": "MEDIUM",
+          "action": "pass"
+        }
+      ],
+      "exact_findings": false,
+      "why": "Documents OEBC staleness: CVE-2026-111497 was KEV-listed 2026-10-27, after the 2026-06-14 OEBC build, so it is not_in_oebc (warn) instead of CRITICAL (block)."
+    },
+    {
+      "id": "poetry-direct-kev",
+      "lockfile_type": "poetry",
+      "old": "cases/poetry-direct-kev/old/poetry.lock",
+      "new": "cases/poetry-direct-kev/new/poetry.lock",
+      "manifest": "cases/poetry-direct-kev/new/pyproject.toml",
+      "expected_verdict": "BLOCK",
+      "expected_exit_code": 1,
+      "tags": [
+        "direct",
+        "kev"
+      ],
+      "expected_findings": [
+        {
+          "package": "langflow",
+          "version": "1.8.4",
+          "cve_id": "CVE-2026-33017",
+          "dependency": "direct",
+          "reason": "graded",
+          "exposure_tier": "CRITICAL",
+          "action": "block"
+        }
+      ],
+      "exact_findings": false,
+      "why": "langflow 1.8.4: highest final release matched by KEV-listed CVE-2026-33017 (CRITICAL in the 2026-06-14 OEBC)."
+    },
+    {
+      "id": "poetry-transitive-kev",
+      "lockfile_type": "poetry",
+      "old": "cases/poetry-transitive-kev/old/poetry.lock",
+      "new": "cases/poetry-transitive-kev/new/poetry.lock",
+      "manifest": "cases/poetry-transitive-kev/new/pyproject.toml",
+      "expected_verdict": "BLOCK",
+      "expected_exit_code": 1,
+      "tags": [
+        "transitive",
+        "kev"
+      ],
+      "expected_findings": [
+        {
+          "package": "pillow",
+          "version": "10.0.0",
+          "cve_id": "CVE-2023-4863",
+          "dependency": "transitive",
+          "reason": "graded",
+          "exposure_tier": "CRITICAL",
+          "action": "block"
+        }
+      ],
+      "exact_findings": false,
+      "why": "starlette (via fastapi) has no CRITICAL CVE in the frozen OEBC: its only KEV CVE, CVE-2026-48710, was KEV-listed 2026-09-02, after the 2026-06-14 OEBC build, which grades it LOW (see the stale-starlette case). pillow via matplotlib is used instead: pillow 10.0.0 is the last release before the fix (10.0.1) for KEV-listed CVE-2023-4863 (libwebp, CRITICAL); matplotlib 3.8.0 has no advisories."
+    },
+    {
+      "id": "poetry-high",
+      "lockfile_type": "poetry",
+      "old": "cases/poetry-high/old/poetry.lock",
+      "new": "cases/poetry-high/new/poetry.lock",
+      "manifest": "cases/poetry-high/new/pyproject.toml",
+      "expected_verdict": "WARN",
+      "expected_exit_code": 0,
+      "tags": [
+        "direct",
+        "high"
+      ],
+      "expected_findings": [
+        {
+          "package": "pyyaml",
+          "version": "5.3.1",
+          "cve_id": "CVE-2020-14343",
+          "dependency": "direct",
+          "reason": "graded",
+          "exposure_tier": "HIGH",
+          "action": "warn"
+        }
+      ],
+      "exact_findings": false,
+      "why": "pyyaml 5.3.1: highest final release whose only finding is HIGH (CVE-2020-14343)."
+    },
+    {
+      "id": "poetry-low",
+      "lockfile_type": "poetry",
+      "old": "cases/poetry-low/old/poetry.lock",
+      "new": "cases/poetry-low/new/poetry.lock",
+      "manifest": "cases/poetry-low/new/pyproject.toml",
+      "expected_verdict": "PASS",
+      "expected_exit_code": 0,
+      "tags": [
+        "direct",
+        "low"
+      ],
+      "expected_findings": [
+        {
+          "package": "pydantic",
+          "version": "2.3.0",
+          "cve_id": "CVE-2024-3772",
+          "dependency": "direct",
+          "reason": "graded",
+          "exposure_tier": "LOW",
+          "action": "pass"
+        }
+      ],
+      "exact_findings": false,
+      "why": "pydantic 2.3.0: highest final release whose only finding is LOW (CVE-2024-3772)."
+    },
+    {
+      "id": "poetry-benign",
+      "lockfile_type": "poetry",
+      "old": "cases/poetry-benign/old/poetry.lock",
+      "new": "cases/poetry-benign/new/poetry.lock",
+      "manifest": "cases/poetry-benign/new/pyproject.toml",
+      "expected_verdict": "PASS",
+      "expected_exit_code": 0,
+      "tags": [
+        "direct",
+        "benign"
+      ],
+      "expected_findings": [],
+      "exact_findings": true,
+      "why": "requests 2.32.5 -> 2.33.0, the fixed version of CVE-2026-25645 (LOW); 2.33.0 has no advisories."
+    },
+    {
+      "id": "poetry-stale-starlette",
+      "lockfile_type": "poetry",
+      "old": "cases/poetry-stale-starlette/old/poetry.lock",
+      "new": "cases/poetry-stale-starlette/new/poetry.lock",
+      "manifest": "cases/poetry-stale-starlette/new/pyproject.toml",
+      "expected_verdict": "WARN",
+      "expected_exit_code": 0,
+      "tags": [
+        "transitive",
+        "kev",
+        "stale_oebc"
+      ],
+      "expected_findings": [
+        {
+          "package": "starlette",
+          "version": "0.41.3",
+          "cve_id": "CVE-2026-48710",
+          "dependency": "transitive",
+          "reason": "graded",
+          "exposure_tier": "LOW",
+          "action": "pass"
+        },
+        {
+          "package": "starlette",
+          "version": "0.41.3",
+          "cve_id": "CVE-2026-48817",
+          "dependency": "transitive",
+          "reason": "not_in_oebc",
+          "exposure_tier": null,
+          "action": "warn"
+        }
+      ],
+      "exact_findings": false,
+      "why": "Documents OEBC staleness: CVE-2026-48710 was KEV-listed 2026-09-02, after the 2026-06-14 OEBC build, so it grades LOW (pass) instead of CRITICAL (block). The WARN comes from newer CVEs not in that OEBC (not_in_oebc). fastapi 0.115.6 has no advisories; starlette 0.41.3 satisfies its starlette<0.42 pin."
+    },
+    {
+      "id": "requirements-direct-kev",
+      "lockfile_type": "requirements",
+      "old": "cases/requirements-direct-kev/old/requirements.txt",
+      "new": "cases/requirements-direct-kev/new/requirements.txt",
+      "expected_verdict": "BLOCK",
+      "expected_exit_code": 1,
+      "tags": [
+        "direct",
+        "kev"
+      ],
+      "expected_findings": [
+        {
+          "package": "litellm",
+          "version": "1.83.6",
+          "cve_id": "CVE-2026-42208",
+          "dependency": "direct",
+          "reason": "graded",
+          "exposure_tier": "CRITICAL",
+          "action": "block"
+        },
+        {
+          "package": "litellm",
+          "version": "1.83.6",
+          "cve_id": "CVE-2026-42271",
+          "dependency": "direct",
+          "reason": "graded",
+          "exposure_tier": "CRITICAL",
+          "action": "block"
+        }
+      ],
+      "exact_findings": false,
+      "why": "litellm 1.83.6: highest final release matched by the KEV-listed CVE-2026-42208 and CVE-2026-42271 (CRITICAL in the 2026-06-14 OEBC); it also has HIGH/MEDIUM/LOW, not_in_oebc and no_cve findings."
+    },
+    {
+      "id": "requirements-transitive-kev",
+      "lockfile_type": "requirements",
+      "old": "cases/requirements-transitive-kev/old/requirements.txt",
+      "new": "cases/requirements-transitive-kev/new/requirements.txt",
+      "expected_verdict": "BLOCK",
+      "expected_exit_code": 1,
+      "tags": [
+        "transitive",
+        "kev"
+      ],
+      "expected_findings": [
+        {
+          "package": "pillow",
+          "version": "10.0.0",
+          "cve_id": "CVE-2023-4863",
+          "dependency": "transitive",
+          "reason": "graded",
+          "exposure_tier": "CRITICAL",
+          "action": "block"
+        }
+      ],
+      "exact_findings": false,
+      "why": "starlette (via fastapi) has no CRITICAL CVE in the frozen OEBC: its only KEV CVE, CVE-2026-48710, was KEV-listed 2026-09-02, after the 2026-06-14 OEBC build, which grades it LOW (see the stale-starlette case). pillow via matplotlib is used instead: pillow 10.0.0 is the last release before the fix (10.0.1) for KEV-listed CVE-2023-4863 (libwebp, CRITICAL); matplotlib 3.8.0 has no advisories."
+    },
+    {
+      "id": "requirements-high",
+      "lockfile_type": "requirements",
+      "old": "cases/requirements-high/old/requirements.txt",
+      "new": "cases/requirements-high/new/requirements.txt",
+      "expected_verdict": "WARN",
+      "expected_exit_code": 0,
+      "tags": [
+        "direct",
+        "high"
+      ],
+      "expected_findings": [
+        {
+          "package": "pyyaml",
+          "version": "5.3.1",
+          "cve_id": "CVE-2020-14343",
+          "dependency": "direct",
+          "reason": "graded",
+          "exposure_tier": "HIGH",
+          "action": "warn"
+        }
+      ],
+      "exact_findings": false,
+      "why": "pyyaml 5.3.1: highest final release whose only finding is HIGH (CVE-2020-14343)."
+    },
+    {
+      "id": "requirements-low",
+      "lockfile_type": "requirements",
+      "old": "cases/requirements-low/old/requirements.txt",
+      "new": "cases/requirements-low/new/requirements.txt",
+      "expected_verdict": "PASS",
+      "expected_exit_code": 0,
+      "tags": [
+        "direct",
+        "low"
+      ],
+      "expected_findings": [
+        {
+          "package": "pydantic",
+          "version": "2.3.0",
+          "cve_id": "CVE-2024-3772",
+          "dependency": "direct",
+          "reason": "graded",
+          "exposure_tier": "LOW",
+          "action": "pass"
+        }
+      ],
+      "exact_findings": false,
+      "why": "pydantic 2.3.0: highest final release whose only finding is LOW (CVE-2024-3772)."
+    },
+    {
+      "id": "requirements-benign",
+      "lockfile_type": "requirements",
+      "old": "cases/requirements-benign/old/requirements.txt",
+      "new": "cases/requirements-benign/new/requirements.txt",
+      "expected_verdict": "PASS",
+      "expected_exit_code": 0,
+      "tags": [
+        "direct",
+        "benign"
+      ],
+      "expected_findings": [],
+      "exact_findings": true,
+      "why": "requests 2.32.5 -> 2.33.0, the fixed version of CVE-2026-25645 (LOW); 2.33.0 has no advisories."
+    },
+    {
+      "id": "requirements-stale-starlette",
+      "lockfile_type": "requirements",
+      "old": "cases/requirements-stale-starlette/old/requirements.txt",
+      "new": "cases/requirements-stale-starlette/new/requirements.txt",
+      "expected_verdict": "WARN",
+      "expected_exit_code": 0,
+      "tags": [
+        "transitive",
+        "kev",
+        "stale_oebc"
+      ],
+      "expected_findings": [
+        {
+          "package": "starlette",
+          "version": "0.41.3",
+          "cve_id": "CVE-2026-48710",
+          "dependency": "transitive",
+          "reason": "graded",
+          "exposure_tier": "LOW",
+          "action": "pass"
+        },
+        {
+          "package": "starlette",
+          "version": "0.41.3",
+          "cve_id": "CVE-2026-48817",
+          "dependency": "transitive",
+          "reason": "not_in_oebc",
+          "exposure_tier": null,
+          "action": "warn"
+        }
+      ],
+      "exact_findings": false,
+      "why": "Documents OEBC staleness: CVE-2026-48710 was KEV-listed 2026-09-02, after the 2026-06-14 OEBC build, so it grades LOW (pass) instead of CRITICAL (block). The WARN comes from newer CVEs not in that OEBC (not_in_oebc). fastapi 0.115.6 has no advisories; starlette 0.41.3 satisfies its starlette<0.42 pin."
+    },
+    {
+      "id": "npm-direct-kev",
+      "lockfile_type": "npm",
+      "old": "cases/npm-direct-kev/old/package-lock.json",
+      "new": "cases/npm-direct-kev/new/package-lock.json",
+      "expected_verdict": "BLOCK",
+      "expected_exit_code": 1,
+      "tags": [
+        "direct",
+        "kev",
+        "dev_only"
+      ],
+      "expected_findings": [
+        {
+          "package": "vite",
+          "version": "6.2.3",
+          "cve_id": "CVE-2025-31125",
+          "dependency": "direct",
+          "reason": "graded",
+          "exposure_tier": "CRITICAL",
+          "action": "block"
+        }
+      ],
+      "exact_findings": false,
+      "why": "vite 6.2.3: last 6.2.x release before the fix (6.2.4) for KEV-listed CVE-2025-31125 (CRITICAL); a devDependency, so the finding carries dev_only."
+    },
+    {
+      "id": "npm-transitive-kev",
+      "lockfile_type": "npm",
+      "old": "cases/npm-transitive-kev/old/package-lock.json",
+      "new": "cases/npm-transitive-kev/new/package-lock.json",
+      "expected_verdict": "BLOCK",
+      "expected_exit_code": 1,
+      "tags": [
+        "transitive",
+        "kev",
+        "nested"
+      ],
+      "expected_findings": [
+        {
+          "package": "jquery",
+          "version": "3.4.1",
+          "cve_id": "CVE-2020-11023",
+          "dependency": "transitive",
+          "reason": "graded",
+          "exposure_tier": "CRITICAL",
+          "action": "block"
+        },
+        {
+          "package": "jquery",
+          "version": "3.4.1",
+          "cve_id": "CVE-2020-11022",
+          "dependency": "transitive",
+          "reason": "graded",
+          "exposure_tier": "MEDIUM",
+          "action": "pass"
+        }
+      ],
+      "exact_findings": false,
+      "why": "jquery 3.4.1 nested under jquery-ui 1.13.2 (no advisories): last release before the fix (3.5.0) for KEV-listed CVE-2020-11023 (CRITICAL)."
+    },
+    {
+      "id": "npm-high",
+      "lockfile_type": "npm",
+      "old": "cases/npm-high/old/package-lock.json",
+      "new": "cases/npm-high/new/package-lock.json",
+      "expected_verdict": "WARN",
+      "expected_exit_code": 0,
+      "tags": [
+        "direct",
+        "high"
+      ],
+      "expected_findings": [
+        {
+          "package": "minimist",
+          "version": "1.2.5",
+          "cve_id": "CVE-2021-44906",
+          "dependency": "direct",
+          "reason": "graded",
+          "exposure_tier": "HIGH",
+          "action": "warn"
+        }
+      ],
+      "exact_findings": false,
+      "why": "minimist 1.2.5: last release before the fix (1.2.6) for CVE-2021-44906, its only finding (HIGH)."
+    },
+    {
+      "id": "npm-low",
+      "lockfile_type": "npm",
+      "old": "cases/npm-low/old/package-lock.json",
+      "new": "cases/npm-low/new/package-lock.json",
+      "expected_verdict": "PASS",
+      "expected_exit_code": 0,
+      "tags": [
+        "direct",
+        "low"
+      ],
+      "expected_findings": [
+        {
+          "package": "express",
+          "version": "4.19.2",
+          "cve_id": "CVE-2024-43796",
+          "dependency": "direct",
+          "reason": "graded",
+          "exposure_tier": "LOW",
+          "action": "pass"
+        }
+      ],
+      "exact_findings": false,
+      "why": "express 4.19.2: highest final release whose only finding is LOW (CVE-2024-43796)."
+    },
+    {
+      "id": "npm-benign",
+      "lockfile_type": "npm",
+      "old": "cases/npm-benign/old/package-lock.json",
+      "new": "cases/npm-benign/new/package-lock.json",
+      "expected_verdict": "PASS",
+      "expected_exit_code": 0,
+      "tags": [
+        "direct",
+        "benign"
+      ],
+      "expected_findings": [],
+      "exact_findings": true,
+      "why": "lodash 4.18.0 -> 4.18.1, the fixed version of CVE-2026-2950 (LOW); 4.18.1 has no advisories."
+    }
+  ]
+}
