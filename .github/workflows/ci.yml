@@ -1,0 +1,167 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  version-check:
+    name: 🔖 Check Version Bump
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify Version Bump in pyproject.toml
+        env:
+          BASE_BRANCH: ${{ github.base_ref }}
+        run: |
+          # Fetch the base branch we are merging into
+          git fetch origin "$BASE_BRANCH"
+
+          # Extract version from current branch
+          CURRENT_VERSION=$(grep '^version =' pyproject.toml | cut -d '"' -f 2)
+
+          # Extract version from base branch (absent before the first release)
+          BASE_VERSION=$(git show "origin/$BASE_BRANCH:pyproject.toml" 2>/dev/null | grep '^version =' | cut -d '"' -f 2 || true)
+
+          echo "Current Version: $CURRENT_VERSION"
+          echo "Base Version: $BASE_VERSION"
+
+          if [ "$CURRENT_VERSION" = "$BASE_VERSION" ]; then
+            echo "::error::Version in pyproject.toml ($CURRENT_VERSION) has not been bumped."
+            echo "::error::Please increment the version number before merging to $BASE_BRANCH."
+            exit 1
+          else
+            echo "Version correctly bumped to $CURRENT_VERSION"
+          fi
+
+  quality:
+    name: 🔍 Code Quality
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Lint (ruff)
+        run: python -m ruff check .
+
+      - name: Type check (mypy, strict)
+        run: python -m mypy src
+
+      - name: Tests with coverage (fails under 90%)
+        run: python -m pytest -q --cov=exposuregate --cov-report=term-missing --cov-report=xml
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        if: matrix.python-version == '3.12'
+        with:
+          files: coverage.xml
+        continue-on-error: true
+
+  release:
+    name: 🚀 Release and Publish
+    needs: [quality]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write # Required for creating the tag and the GitHub release
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch all history and tags so the tag can be checked
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Extract Project Version
+        id: version
+        run: |
+          VERSION=$(grep '^version =' pyproject.toml | cut -d '"' -f 2)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check if the Version Is Already Tagged
+        id: check_tag
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          TAG_NAME="v$VERSION"
+          git fetch --tags --force origin
+          if git rev-parse -q --verify "refs/tags/$TAG_NAME" >/dev/null; then
+            echo "Tag $TAG_NAME already exists. Skipping release."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Tag $TAG_NAME does not exist. Proceeding."
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check That the Package Version Matches __version__
+        if: steps.check_tag.outputs.exists == 'false'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          INIT_VERSION=$(grep '^__version__ =' src/exposuregate/__init__.py | cut -d '"' -f 2)
+          if [ "$INIT_VERSION" != "$VERSION" ]; then
+            echo "::error::pyproject.toml says $VERSION but src/exposuregate/__init__.py says $INIT_VERSION."
+            exit 1
+          fi
+
+      - name: Install Build Tools
+        if: steps.check_tag.outputs.exists == 'false'
+        run: python -m pip install --upgrade pip build twine
+
+      - name: Build Package
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          python -m build
+          python -m twine check dist/*
+
+      - name: Publish to PyPI
+        if: steps.check_tag.outputs.exists == 'false'
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        run: python -m twine upload dist/*
+
+      - name: Create GitHub Release and Tag
+        if: steps.check_tag.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          TAG_NAME="v$VERSION"
+          # Release notes: this version's section of CHANGELOG.md.
+          awk -v v="$VERSION" '
+            $0 ~ "^## \\[" v "\\]" { on = 1; next }
+            on && /^## \[/ { exit }
+            on && /^\[[^]]+\]: / { exit }
+            on { print }
+          ' CHANGELOG.md > release-notes.md
+          [ -s release-notes.md ] || echo "Release $TAG_NAME" > release-notes.md
+          gh release create "$TAG_NAME" dist/* \
+            --title "Release $TAG_NAME" \
+            --notes-file release-notes.md \
+            --target "$GITHUB_SHA"
