@@ -14,8 +14,6 @@ lockfile diff -> added or changed (package, version) -> OSV advisories -> CVE al
               -> OEBC exposure_tier -> block / warn / pass -> verdict
 ```
 
-The design is in [`docs/superpowers/specs/2026-11-14-exposuregate-design.md`](docs/superpowers/specs/2026-11-14-exposuregate-design.md).
-
 ## What it grades
 
 | Type | Files (by basename, anywhere in the repo) | Ecosystem |
