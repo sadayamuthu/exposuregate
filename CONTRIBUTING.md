@@ -12,6 +12,7 @@ above 90% coverage.
 - [Code layout](#code-layout)
 - [Adding a lockfile parser](#adding-a-lockfile-parser)
 - [Pull requests](#pull-requests)
+- [Releasing](#releasing)
 - [Security](#security)
 - [License](#license)
 
@@ -79,8 +80,11 @@ python -m pytest -q --cov=exposuregate --cov-report=term-missing
 ```
 
 `make check` runs lint, typecheck and tests together, and `make format`
-applies ruff's automatic lint fixes. On pull requests, CI also fails if the
-version in `pyproject.toml` hasn't changed.
+applies ruff's automatic lint fixes. There is no `ruff format` check yet: most
+of the code base predates it, and reformatting it would be a separate,
+style-only change. On pull requests, CI also fails if the version in
+`pyproject.toml` is already tagged (released), and it runs the composite
+action (`uses: ./`) on a small repository built from the planted fixtures.
 
 ## Tests
 
@@ -142,7 +146,11 @@ against the new data.
    `unknown`. Sources that can't be graded (git, path, URL, editable,
    workspace) go into `skipped` with a reason, not into `pins`. Raise
    `LockfileError` on a file that doesn't parse, so the scan denies it
-   instead of guessing.
+   instead of guessing. If the parser needs the manifest next to the
+   lockfile, take it as a second argument the way `parse_poetry(text,
+   manifest_text)` takes `pyproject.toml`; `parse()` in
+   `lockfiles/__init__.py` and the manifest lookup in `scan.py` pass it only
+   to poetry today, so extend both.
 2. Register it in `PARSERS` and `ECOSYSTEM` in `lockfiles/__init__.py`.
    `--lockfile-type` takes its choices from `PARSERS`.
 3. Add a `lockfiles.<type>` entry (`enabled`, `globs`) to `DEFAULTS` in
@@ -173,6 +181,28 @@ fail closed rather than grade part of it.
   and tagged by CI.
 - CI must pass.
 - Update README.md when you change behaviour a user can see.
+
+## Releasing
+
+Releases come from CI, not from a laptop. On every push to `main`, the
+`release` job in `.github/workflows/ci.yml` reads the version from
+`pyproject.toml`:
+
+- **Merging a version that isn't tagged yet publishes it.** The job checks
+  that `__version__` matches, builds the sdist and wheel, creates and pushes
+  the tag `v<version>`, uploads to PyPI with `twine upload --non-interactive
+  --skip-existing`, and creates the GitHub release with that version's
+  CHANGELOG section as the notes. If `v<version>` is already tagged on
+  another commit, the job does nothing.
+- **It can be re-run.** If a step fails after the tag is pushed, re-running
+  the job on the same commit finishes the release: the tag is reused, the
+  upload skips files PyPI already has, and an existing GitHub release is
+  left alone.
+- **`PYPI_TOKEN`** is a repository secret holding a PyPI API token. For the
+  first upload, before the `exposuregate` project exists on PyPI, it must be
+  an account-scoped token; afterwards it can be replaced with one scoped to
+  the project. Without the secret, the job prints a notice and skips the
+  tag, the upload and the release.
 
 ## Security
 

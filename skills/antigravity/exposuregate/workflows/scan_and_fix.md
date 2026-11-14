@@ -17,7 +17,7 @@ This workflow defines the standard operating procedure for using ExposureGate to
    Pre-commit mode grades the staged lockfiles, so stage the lockfile, then scan.
    // turbo
    ```bash
-   git add uv.lock poetry.lock requirements*.txt package-lock.json 2>/dev/null
+   git add <the lockfile(s) you changed>
    exposuregate scan --output-dir .exposuregate/reports
    ```
 
