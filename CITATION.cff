@@ -1,0 +1,37 @@
+cff-version: 1.2.0
+message: "If you use ExposureGate, please cite it using these metadata."
+type: software
+title: "ExposureGate: exploited-vulnerability gate for dependency lockfiles in pre-commit and CI"
+abstract: >-
+  ExposureGate is a command-line tool that grades the dependency versions a
+  code change adds to its lockfiles before commit and merge. It parses the
+  staged change, a pull request or a whole repository across
+  requirements.txt, poetry.lock, uv.lock and package-lock.json, matches every
+  added or changed version, direct and transitive, to OSV advisories, maps
+  their CVE aliases to the exposure tier in the Open Exposure Baseline
+  Catalog (OEBC), where KEV-listed CVEs are CRITICAL and EPSS and CVSS set
+  the lower tiers, and returns a PASS, WARN, BLOCK or DENY verdict as JSON
+  and Markdown. It fails closed on missing or stale data, never uses the
+  network during a scan, supports historical replay, and runs as a
+  pre-commit hook, in CI and as a GitHub Action.
+authors:
+  - family-names: Sadayamuthu
+    given-names: Karthikeyan
+    orcid: "https://orcid.org/0009-0008-3539-6048"
+version: 0.1.0
+date-released: "2026-11-14"
+license: MIT
+repository-code: "https://github.com/sadayamuthu/exposuregate"
+url: "https://github.com/sadayamuthu/exposuregate"
+keywords:
+  - software supply chain
+  - vulnerability management
+  - known exploited vulnerabilities
+  - KEV
+  - EPSS
+  - OSV
+  - dependency scanning
+  - lockfiles
+  - DevSecOps
+  - pre-commit
+  - CI
