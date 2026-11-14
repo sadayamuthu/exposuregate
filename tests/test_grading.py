@@ -1,6 +1,8 @@
 from dataclasses import replace
 from datetime import date, datetime, timezone
 
+import pytest
+
 from exposuregate.config import load_config
 from exposuregate.grading import (
     apply_policy,
@@ -139,6 +141,33 @@ def test_policy_overrides_apply(tmp_path):
     assert f.action == "block"
 
 
+@pytest.mark.parametrize(
+    ("key", "pin", "default"),
+    [
+        ("CRITICAL", cp("kevpkg"), "block"),
+        ("HIGH", cp("highpkg"), "warn"),
+        ("MEDIUM", cp("medpkg"), "pass"),
+        ("LOW", cp("lowpkg"), "pass"),
+        ("not_in_oebc", cp("unknown"), "warn"),
+        ("no_cve", cp("nocve"), "warn"),
+        ("unparseable_version", cp("highpkg", version="not.a.version!"), "warn"),
+        ("unpinned", cp("highpkg", version=""), "warn"),
+    ],
+)
+def test_every_policy_key_overrides_behaviour(tmp_path, key, pin, default):
+    (f,) = g(tmp_path, pin)
+    assert f.action == default
+    other = "pass" if default != "pass" else "block"
+    (f,) = g(tmp_path, pin, f"policy:\n  {key}: {other}\n")
+    assert f.action == other
+
+
+def test_policy_unsupported_lockfile_override(tmp_path):
+    for action in ("pass", "warn", "block"):
+        c = cfg(tmp_path, f"policy:\n  unsupported_lockfile: {action}\n")
+        assert unsupported_finding("yarn.lock", c).action == action
+
+
 def test_notes(tmp_path):
     (f,) = g(tmp_path, cp("highpkg", marker="python_version<'3.9'", source="legacy", dev_only=True))
     assert f.notes == ["marker: python_version<'3.9'", "source: legacy", "dev_only"]
@@ -178,6 +207,15 @@ def test_suppression_expired_reported_and_warns(tmp_path):
     assert e.reason == "suppression_expired" and e.action == "warn" and e.base_action == "warn"
     assert e.cve_id == "CVE-2020-0001" and "2026-11-13" in e.notes[0]
     assert len(e.finding_id) == 64
+
+
+def test_renewed_suppression_after_expired_entry_suppresses_without_warning(tmp_path):
+    c = cfg(tmp_path, sup("{id: CVE-2020-0001, reason: old, expires: 2026-11-13}")
+            + "  - {id: CVE-2020-0001, reason: renewed, expires: 2027-01-01}\n")
+    fs = grade("uv.lock", [cp("kevpkg")], store(), c, NOW)
+    assert fs[0].action == "pass" and fs[0].suppressed_by == "CVE-2020-0001"
+    rep, extra = expired_suppressions(fs, c, NOW)
+    assert rep == [] and extra == []
 
 
 def test_expired_suppression_advisory_id_and_unmatched(tmp_path):

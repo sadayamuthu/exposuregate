@@ -535,6 +535,8 @@ def test_hook_and_action_files_exist():
     hooks = (ROOT / ".pre-commit-hooks.yaml").read_text()
     assert "entry: exposuregate scan --mode pre-commit" in hooks
     assert "pass_filenames: false" in hooks
+    assert "always_run: true" in hooks and "verbose: true" in hooks
+    assert "files:" not in hooks
     action = (ROOT / "docs" / "github-action.yml").read_text()
     assert "fetch-depth: 0" in action and "exposuregate update-data" in action
     assert "--target-branch ${{ github.base_ref }}" in action
@@ -545,3 +547,34 @@ def test_copy_of_repo_fixture_lockfile_grades(repo, capsys):
     git(repo, "add", "uv.lock")
     code, r = scan(capsys, "--path", str(repo), *DATA)
     assert r["lockfiles"][0]["status"] == "graded" and code in (0, 1)
+
+
+def test_config_unsupported_globs_custom_list(repo, capsys):
+    put(repo, ".exposuregate.yml", "unsupported_globs: [custom.lock]\n")
+    put(repo, "custom.lock", "x")
+    put(repo, "yarn.lock", "y")  # no longer in the unsupported list
+    code, r = scan(capsys, "--path", str(repo))
+    statuses = {lf["path"]: lf["status"] for lf in r["lockfiles"]}
+    assert statuses["custom.lock"] == "unsupported" and "yarn.lock" not in statuses
+    assert [f["lockfile"] for f in r["findings"]] == ["custom.lock"]
+    assert code == 0 and r["verdict"] == "WARN"
+
+
+def test_config_reporting_format_and_output_dir(repo, capsys):
+    put(repo, ".exposuregate.yml",
+        "reporting:\n  format: [markdown]\n  output_dir: reports-here\n")
+    put(repo, "README.md", "hi\n")
+    assert main(["scan", "--path", str(repo)]) == 0
+    out = capsys.readouterr().out
+    assert out.lstrip().startswith("# ExposureGate") and "{" not in out.split("\n")[0]
+    assert (repo / "reports-here" / "report.md").is_file()
+    assert not (repo / "reports-here" / "report.json").exists()
+
+
+def test_unwritable_output_dir_exits_2_not_1(repo, tmp_path, capsys):
+    put(repo, "uv.lock", uv_lock(litellm="1.30.0"))  # would BLOCK (exit 1)
+    blocker = tmp_path / "afile"
+    blocker.write_text("x")
+    code = main(["scan", "--path", str(repo), *DATA, "--output-dir", str(blocker / "sub")])
+    assert code == 2
+    assert "unexpected error" in capsys.readouterr().err
