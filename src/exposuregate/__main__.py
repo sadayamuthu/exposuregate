@@ -67,6 +67,13 @@ def _parser() -> argparse.ArgumentParser:
     u.add_argument("--data-dir", type=Path)
     u.add_argument("--ecosystems", nargs="+", default=["PyPI", "npm"], choices=["PyPI", "npm"])
 
+    r = sub.add_parser("rebuild-oebc", help="rebuild an OEBC catalog as of a past date")
+    r.add_argument("--as-of", type=_iso_date, required=True)
+    r.add_argument("--kev", type=Path, required=True)
+    r.add_argument("--epss-dir", type=Path, required=True)
+    r.add_argument("--oebc", type=Path, required=True)
+    r.add_argument("--out", type=Path, required=True)
+
     i = sub.add_parser("data-info", help="show the local data snapshot")
     i.add_argument("--data-dir", type=Path)
     return p
@@ -88,6 +95,8 @@ def _scan_mode(p: argparse.ArgumentParser, a: argparse.Namespace) -> str:
         p.error("--lockfile-type and --manifest are only valid with --new")
     if a.replay and a.as_of is None:
         p.error("--replay needs --as-of")
+    if a.archive is not None and a.as_of is None:
+        p.error("--archive needs --as-of")
     if a.archive is not None and (a.oebc is not None or a.osv_dir is not None):
         p.error("--archive cannot be combined with --oebc/--osv-dir")
     if git_refs:
@@ -160,6 +169,13 @@ def main(argv: list[str] | None = None) -> int:
             data_dir = _data_dir(a)
             print(f"exposuregate: updating data in {data_dir}", file=sys.stderr)
             update_data(data_dir, list(a.ecosystems))
+            return 0
+        if a.command == "rebuild-oebc":
+            from exposuregate.rebuild import rebuild_oebc
+
+            cat = rebuild_oebc(a.as_of, a.kev, a.epss_dir, a.oebc, a.out)
+            print(f"exposuregate: rebuilt OEBC as of {a.as_of}: {cat['count']} CVEs -> {a.out}",
+                  file=sys.stderr)
             return 0
         if a.command == "data-info":
             from exposuregate.update import data_info

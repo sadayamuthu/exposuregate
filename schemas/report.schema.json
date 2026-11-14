@@ -48,7 +48,16 @@
             }
           }
         },
-        "replay": {"type": "object"}
+        "replay": {
+          "type": "object", "additionalProperties": false,
+          "required": ["replay", "osv_mode", "as_of"],
+          "properties": {
+            "replay": {"const": true},
+            "osv_mode": {"enum": ["current_filtered", "archived"]},
+            "as_of": {"type": "string"},
+            "archive_day": {"type": "string"}
+          }
+        }
       }
     },
     "policy": {"type": "object", "additionalProperties": {"enum": ["pass", "warn", "block"]}},

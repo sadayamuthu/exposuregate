@@ -8,7 +8,7 @@ import os
 import re
 import sqlite3
 import zipfile
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -103,7 +103,7 @@ def load_oebc(path: Path) -> tuple[SourceMeta, dict[str, dict[str, Any]]]:
     return SourceMeta("oebc", date_, count, extra), rows
 
 
-def _parse_record(raw: bytes | str, where: str) -> dict[str, Any]:
+def parse_osv_record(raw: bytes | str, where: str) -> dict[str, Any]:
     try:
         rec = json.loads(raw)
         if not isinstance(rec, dict) or not isinstance(rec.get("id"), str):
@@ -120,13 +120,13 @@ def _parse_record(raw: bytes | str, where: str) -> dict[str, Any]:
 def iter_osv(source: Path) -> Iterator[dict[str, Any]]:
     if source.is_dir():
         for p in sorted(source.rglob("*.json")):
-            yield _parse_record(p.read_bytes(), str(p))
+            yield parse_osv_record(p.read_bytes(), str(p))
         return
     try:
         with zipfile.ZipFile(source) as z:
             for n in z.namelist():
                 if n.endswith(".json"):
-                    yield _parse_record(z.read(n), f"{source}:{n}")
+                    yield parse_osv_record(z.read(n), f"{source}:{n}")
     except (zipfile.BadZipFile, OSError) as e:
         raise DataInvalid(f"cannot open OSV source {source}: {e}") from e
 
@@ -186,16 +186,25 @@ class MemoryStore:
         osv_sources: list[Path],
         published_before: date | None = None,
     ) -> MemoryStore:
+        records = (rec for src in osv_sources for rec in iter_osv(src))
+        return cls.from_records(oebc_path, records, published_before)
+
+    @classmethod
+    def from_records(
+        cls,
+        oebc_path: Path | None,
+        osv_records: Iterable[dict[str, Any]],
+        published_before: date | None = None,
+    ) -> MemoryStore:
         oebc_meta, oebc_rows = load_oebc(oebc_path) if oebc_path else (None, {})
         tally = _OsvTally()
         adv: dict[tuple[str, str], list[dict[str, Any]]] = {}
-        for src in osv_sources:
-            for rec in iter_osv(src):
-                tally.add(rec)
-                if _published_after(rec, published_before):
-                    continue
-                for key in _index_entries(rec):
-                    adv.setdefault(key, []).append(rec)
+        for rec in osv_records:
+            tally.add(rec)
+            if _published_after(rec, published_before):
+                continue
+            for key in _index_entries(rec):
+                adv.setdefault(key, []).append(rec)
         return cls(DataMeta(oebc_meta, tally.meta()), adv, oebc_rows)
 
     def advisories(self, ecosystem: str, name: str) -> list[dict[str, Any]]:

@@ -107,5 +107,12 @@ def test_report_records_snapshot_dates():
     assert r["data"]["osv"]["PyPI"]["age_days"] == 0
     assert r["data"]["osv"]["PyPI"]["advisories"] == 5
     m = meta()
-    m.replay = {"as_of": "2026-01-01"}
-    assert build(m=m)["data"]["replay"] == {"as_of": "2026-01-01"}
+    m.replay = {"replay": True, "osv_mode": "archived", "as_of": "2026-01-01",
+                "archive_day": "2025-12-31"}
+    r = build(m=m)
+    assert r["data"]["replay"] == m.replay
+    jsonschema.validate(r, SCHEMA)
+    assert "Replay as of 2026-01-01: OSV archived, archive day 2025-12-31" in to_markdown(r)
+    r["data"]["replay"] = {"as_of": "2026-01-01"}
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(r, SCHEMA)

@@ -138,7 +138,12 @@ def to_markdown(report: dict[str, Any]) -> str:
         parts.append("OEBC missing")
     for eco, v in d["osv"].items():
         parts.append(f"OSV {eco} {v['as_of'][:10]} ({v['age_days']}d old)")
-    out += ["Data: " + "; ".join(parts), "", "## Lockfiles", ""]
+    out.append("Data: " + "; ".join(parts))
+    rp = d.get("replay")
+    if rp:
+        day = f", archive day {rp['archive_day']}" if rp.get("archive_day") else ""
+        out += ["", f"Replay as of {rp.get('as_of')}: OSV {rp.get('osv_mode')}{day}"]
+    out += ["", "## Lockfiles", ""]
     for lf in report["lockfiles"]:
         extra = ""
         if lf["status"] == "graded":
