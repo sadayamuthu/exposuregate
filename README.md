@@ -94,6 +94,8 @@ Reports go to stdout, JSON first and then Markdown, or in the order given by
 `--format json markdown`. If `reporting.output_dir` or `--output-dir` is set, they are also
 written there as `report.json` and `report.md`. Progress lines go to stderr. The JSON report
 conforms to [`schemas/report.schema.json`](schemas/report.schema.json).
+The default `output_dir` writes reports inside the repository, so add `.exposuregate/` to your
+`.gitignore`.
 
 ### Exit codes
 
@@ -138,11 +140,11 @@ repos:
       - id: exposuregate
 ```
 
-The hook runs `exposuregate scan --mode pre-commit`. Its `files` regex fires only on the four
-graded globs: `requirements*.txt`, `poetry.lock`, `uv.lock` and `package-lock.json`. A commit that
-changes only an unsupported lockfile (for example `yarn.lock`) or only a manifest
-(`pyproject.toml`, `package.json`) does not trigger the hook. Run `exposuregate scan` yourself, or
-in CI, to get the `unsupported_lockfile` warning and the `manifest_only` note for those files.
+The hook runs `exposuregate scan --mode pre-commit` with `always_run: true` and `verbose: true`.
+A `files` regex would bypass your configured globs (custom `lockfiles.*.globs`,
+`unsupported_globs`) and pre-commit hides the output of passing hooks, which would hide WARN
+reports. The scan itself decides what matters: a commit that changes no graded lockfile needs no
+data and exits quickly with PASS.
 Run `exposuregate update-data` regularly (daily) so the hook is not denied for stale data. A
 commit that changes no graded lockfile never checks data freshness, so it is never blocked by
 stale data.

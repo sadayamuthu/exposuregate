@@ -433,7 +433,8 @@ Denial codes: `data_missing`, `data_stale`, `data_from_future`, `data_invalid`,
 ## 10. Integration
 
 - `.pre-commit-hooks.yaml`: hook `exposuregate`, `entry: exposuregate scan --mode pre-commit`,
-  `language: python`, `pass_filenames: false`, `files` regex matching the default globs.
+  `language: python`, `pass_filenames: false`, `always_run: true` and `verbose: true` (a `files`
+  regex would bypass configured globs and hide WARN output).
 - `docs/github-action.yml` example: checkout with `fetch-depth: 0`, cache `data_dir` keyed on
   date, run `exposuregate update-data` then `exposuregate scan --mode pr --target-branch
   ${{ github.base_ref }}`, upload `report.json`, post `report.md`.
