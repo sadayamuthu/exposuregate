@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from exposuregate import freshness, gitio
+from exposuregate.archive import ArchiveStore
 from exposuregate.config import Config
 from exposuregate.diffing import changed_pins
 from exposuregate.grading import expired_suppressions, grade, unsupported_finding, verdict
@@ -298,11 +299,22 @@ def _osv_sources(osv_dir: Path) -> list[Path]:
     return sources
 
 
-def _open_store(opts: ScanOptions, cfg: Config) -> DataStore:
+def _open_store(opts: ScanOptions, cfg: Config, needed: set[str]) -> DataStore:
     """Open the advisory store; raises DataMissing / DataInvalid."""
+    store = _open_base_store(opts, cfg, needed)
+    if opts.archive is not None or opts.replay:  # spec 6.4: record how the replay was made
+        assert opts.as_of is not None  # enforced by the CLI
+        mode = store.meta.replay or {"osv_mode": "current_filtered"}
+        store.meta.replay = {"replay": True, **mode, "as_of": opts.as_of.isoformat()}
+    return store
+
+
+def _open_base_store(opts: ScanOptions, cfg: Config, needed: set[str]) -> DataStore:
     if opts.archive is not None:
-        # Hook for Task 14: ArchiveStore reading the snapshot archive layout (spec 6.5).
-        raise UsageError("--archive is not yet supported")
+        if opts.as_of is None:
+            raise UsageError("--archive needs --as-of")
+        # Archived state is as of the archive day: no published-date filter (spec 6.5).
+        return ArchiveStore.open(opts.archive, opts.as_of, needed)
     if opts.oebc_file is not None or opts.osv_dir is not None:
         if opts.oebc_file is not None and not opts.oebc_file.exists():
             raise DataMissing(f"OEBC file not found: {opts.oebc_file}")
@@ -353,9 +365,10 @@ def run_scan(opts: ScanOptions, cfg: Config) -> tuple[dict[str, Any], int]:
     t0 = time.perf_counter()
     if needed:  # no graded change -> no data needed, freshness not checked (spec 10)
         try:
-            store = _open_store(opts, cfg)
+            store = _open_store(opts, cfg, needed)
             meta = store.meta
-            denials += freshness.check(meta, needed, now, cfg, opts.replay)
+            replay = opts.replay or opts.archive is not None
+            denials += freshness.check(meta, needed, now, cfg, replay)
         except DataMissing as e:
             denials.append(Denial("data_missing", str(e)))
         except DataInvalid as e:
