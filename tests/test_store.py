@@ -75,7 +75,7 @@ def test_meta_dates():
     assert m.oebc.extra["project_version"] == "0.1.0"
     assert m.oebc.extra["rules"] == {"actionable_min_tier": "medium"}
     assert m.osv["PyPI"].date == datetime(2026, 11, 13, 18, 15, 7, 541730, tzinfo=timezone.utc)
-    assert m.osv["PyPI"].count == 4
+    assert m.osv["PyPI"].count == 5
     assert m.osv["npm"].date == datetime(2026, 11, 12, 9, 0, 0, 500000, tzinfo=timezone.utc)
 
 

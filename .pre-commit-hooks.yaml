@@ -1,0 +1,7 @@
+- id: exposuregate
+  name: exposuregate
+  description: Grade dependency versions added in staged lockfiles using OSV and OEBC data.
+  entry: exposuregate scan --mode pre-commit
+  language: python
+  pass_filenames: false
+  files: (^|/)(requirements[^/]*\.txt|poetry\.lock|uv\.lock|package-lock\.json)$

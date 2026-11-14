@@ -1,0 +1,55 @@
+# Example GitHub Actions workflow for ExposureGate (copy to .github/workflows/exposuregate.yml).
+name: exposuregate
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  exposuregate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ExposureGate
+        run: pip install exposuregate
+
+      - name: Date key for the data cache
+        id: date
+        run: echo "today=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache ExposureGate data
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/exposuregate
+          key: exposuregate-data-${{ steps.date.outputs.today }}
+
+      - name: Update OSV and OEBC data
+        run: exposuregate update-data
+
+      - name: Scan the pull request
+        run: |
+          exposuregate scan --mode pr --target-branch ${{ github.base_ref }} \
+            --output-dir exposuregate-report
+
+      - name: Upload report.json
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exposuregate-report
+          path: exposuregate-report/report.json
+
+      - name: Post report.md as a PR comment
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr comment ${{ github.event.pull_request.number }} --body-file exposuregate-report/report.md
