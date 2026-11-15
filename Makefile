@@ -40,7 +40,7 @@ clean: ## Clean build artifacts
 build: clean ## Build distribution packages
 	$(PYTHON) -m build
 
-publish: build ## Publish to PyPI (requires PyPI credentials, e.g. TWINE_PASSWORD)
+publish: build ## Publish to PyPI by hand (CI normally does this via Trusted Publishing; needs TWINE_PASSWORD)
 	$(PYTHON) -m twine check dist/*
 	$(PYTHON) -m twine upload dist/*
 

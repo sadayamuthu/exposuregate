@@ -190,19 +190,22 @@ Releases come from CI, not from a laptop. On every push to `main`, the
 
 - **Merging a version that isn't tagged yet publishes it.** The job checks
   that `__version__` matches, builds the sdist and wheel, creates and pushes
-  the tag `v<version>`, uploads to PyPI with `twine upload --non-interactive
-  --skip-existing`, and creates the GitHub release with that version's
-  CHANGELOG section as the notes. If `v<version>` is already tagged on
+  the tag `v<version>`, uploads to PyPI with `pypa/gh-action-pypi-publish`
+  (skipping files already there), and creates the GitHub release with that
+  version's CHANGELOG section as the notes. If `v<version>` is already tagged on
   another commit, the job does nothing.
 - **It can be re-run.** If a step fails after the tag is pushed, re-running
   the job on the same commit finishes the release: the tag is reused, the
   upload skips files PyPI already has, and an existing GitHub release is
   left alone.
-- **`PYPI_TOKEN`** is a repository secret holding a PyPI API token. For the
-  first upload, before the `exposuregate` project exists on PyPI, it must be
-  an account-scoped token; afterwards it can be replaced with one scoped to
-  the project. Without the secret, the job prints a notice and skips the
-  tag, the upload and the release.
+- **Uploads use PyPI Trusted Publishing; no token is stored.** PyPI trusts
+  the `sadayamuthu/exposuregate` repository, the `ci.yml` workflow and the
+  `pypi` environment, and GitHub swaps the job's OIDC token for a short-lived
+  upload token. Before the first release, add a pending publisher on PyPI
+  (Account settings → Publishing → Add a new pending publisher) with owner
+  `sadayamuthu`, repository `exposuregate`, workflow `ci.yml` and
+  environment `pypi`. If those details don't match, the upload fails with
+  `invalid-publisher`; fix them on PyPI and re-run the job.
 
 ## Security
 
