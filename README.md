@@ -8,7 +8,7 @@
 
 [![CI](https://img.shields.io/github/actions/workflow/status/sadayamuthu/exposuregate/ci.yml?branch=main&label=CI&style=flat-square)](https://github.com/sadayamuthu/exposuregate/actions/workflows/ci.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue?style=flat-square)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/github/license/sadayamuthu/exposuregate?style=flat-square)](LICENSE)
+[![License](https://img.shields.io/github/license/sadayamuthu/exposuregate?style=flat-square)](https://github.com/sadayamuthu/exposuregate/blob/main/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/exposuregate?style=flat-square)](https://pypi.org/project/exposuregate/)
 
 ---
@@ -143,7 +143,7 @@ cache the data directory keyed on the date, run `update-data` and then
 `scan --mode pr --target-branch <base branch>`. The base branch usually exists only as
 `origin/<branch>` in the checkout, and `--target-branch` falls back to that.
 
-**Option 1: the composite action.** [`action.yml`](action.yml) at the root of this repository
+**Option 1: the composite action.** [`action.yml`](https://github.com/sadayamuthu/exposuregate/blob/main/action.yml) at the root of this repository
 installs ExposureGate with pip, from the action's own checkout by default, so the tool always
 matches the action ref (`@v0.1.0` runs ExposureGate 0.1.0). It then runs the scan:
 
@@ -212,7 +212,7 @@ data or is denied for missing or stale data.
 On pull requests from forks, `GITHUB_TOKEN` is read-only, so the PR comment step cannot post;
 it is marked `continue-on-error` and the report is still in the artifact and the job summary.
 
-**Option 2: raw steps.** [`docs/github-action.yml`](docs/github-action.yml) is a ready-to-copy
+**Option 2: raw steps.** [`docs/github-action.yml`](https://github.com/sadayamuthu/exposuregate/blob/main/docs/github-action.yml) is a ready-to-copy
 workflow that does the same with plain `run:` steps, if you would rather not depend on the
 action. It installs ExposureGate from PyPI, uploads `report.json` and posts `report.md` as a PR
 comment (skipped when there is no report, and allowed to fail on fork PRs).
@@ -381,7 +381,7 @@ verdict comes from the findings, but a scan with any denial is never better than
 
 | Format | Use Case |
 |--------|----------|
-| `json` | Programmatic consumption, agents, dashboards; conforms to [`schemas/report.schema.json`](schemas/report.schema.json) |
+| `json` | Programmatic consumption, agents, dashboards; conforms to [`schemas/report.schema.json`](https://github.com/sadayamuthu/exposuregate/blob/main/schemas/report.schema.json) |
 | `markdown` | PR comments, job summaries, terminal output |
 
 Reports go to stdout, JSON first and then Markdown, or in the order given by
@@ -500,7 +500,7 @@ ExposureGate provides skills for popular AI coding assistants. They teach the ag
 by moving the package to a version in its `fixed_in` list, never by adding a suppression without a
 reason and an expiry date.
 
-The agent prompts and workflows are located in the [`skills/`](skills/) directory:
+The agent prompts and workflows are located in the [`skills/`](https://github.com/sadayamuthu/exposuregate/tree/main/skills) directory:
 
 - **Antigravity**: Full workflow definitions available in `skills/antigravity/exposuregate/`
 - **Cursor**: Repository rules available in `skills/cursor/.cursorrules`
@@ -528,7 +528,7 @@ snapshot, and every report records them under `data`.
 ## Contributing
 
 Bug reports, wrong or missed findings and new lockfile parsers are welcome. See
-[CONTRIBUTING.md](CONTRIBUTING.md) for the development setup, the tests and how to add a lockfile
+[CONTRIBUTING.md](https://github.com/sadayamuthu/exposuregate/blob/main/CONTRIBUTING.md) for the development setup, the tests and how to add a lockfile
 parser.
 
 ---
@@ -536,13 +536,13 @@ parser.
 ## Security
 
 Please report security problems privately, not in a public issue. See
-[SECURITY.md](SECURITY.md).
+[SECURITY.md](https://github.com/sadayamuthu/exposuregate/blob/main/SECURITY.md).
 
 ---
 
 ## License
 
-[MIT License](LICENSE). See [CHANGELOG.md](CHANGELOG.md) for release notes.
+[MIT License](https://github.com/sadayamuthu/exposuregate/blob/main/LICENSE). See [CHANGELOG.md](https://github.com/sadayamuthu/exposuregate/blob/main/CHANGELOG.md) for release notes.
 
 ---
 
