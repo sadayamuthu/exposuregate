@@ -71,7 +71,7 @@ runs:
   using: composite
   steps:
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v7
       with:
         python-version: ${{ inputs.python-version }}
 
@@ -110,7 +110,7 @@ runs:
     - name: Restore cached ExposureGate data
       id: restore
       if: inputs.update-data == 'true'
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@v6
       with:
         path: ${{ steps.data.outputs.dir }}
         key: ${{ steps.data.outputs.key }}
@@ -140,7 +140,7 @@ runs:
     # Saved before the scan, so a BLOCK or DENY still caches the day's data.
     - name: Save ExposureGate data to the cache
       if: inputs.update-data == 'true' && steps.update.outputs.ok == 'true' && steps.restore.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@v6
       with:
         path: ${{ steps.data.outputs.dir }}
         key: ${{ steps.data.outputs.key }}
